@@ -21,7 +21,7 @@ tables = {'account_permission': 0, 'address': 1, 'broker': 2, 'cash_transaction'
           'zip_code': 33}
 
 # [0]- тип запроса [1] - индекс листа с таблицами [2] - индекс листа с полями
-query_mode = {'SELECT': [1, 6, 2], 'INSERT': [2, 4, 4], 'UPDATE': [3, 2,6], 'DELETE': [4, 4]}
+query_mode = {'SELECT': [1, 6, 2], 'INSERT': [2, 4, 4], 'UPDATE': [3, 2, 6], 'DELETE': [4, 4]}
 
 fields = {'ap_ca_id': ['account_permission', 0], 'ap_acl': ['account_permission', 1],
           'ap_tax_id': ['account_permission', 2],
@@ -115,6 +115,8 @@ fields = {'ap_ca_id': ['account_permission', 0], 'ap_acl': ['account_permission'
 # Заметка про МЕТОД1. Там у нас есть еще одна таблица y test с правильными значениями.
 # И после классификации получившийся y_test сравнивается с ней.
 
+#ЗАМЕТКА.  ВСЕ процедуры с векторами надо переделать, чтобы второй массив включал в себя все таблицы, а не только использованные.
+
 def transaction_numbering(data):
     num = 0
     for index, rows in data.iterrows():
@@ -192,37 +194,37 @@ def PROJ_ATTR(query):
     count_list = []
     # for el in ilist.get_identifiers():
     copy_ilist = ilist.copy()
-    new_list= []
+    new_list = []
     for el in copy_ilist:
-        #if not fields.get(str(el)):
+        # if not fields.get(str(el)):
         tokenizer = RegexpTokenizer(r'\w+')
-        print('Обработка',str(el))
+        print('Обработка', str(el))
         tokens = tokenizer.tokenize(str(el))
-        print('токены',tokens)
+        print('токены', tokens)
         for elem in tokens:
             if fields.get(str(elem)):
                 new_list.append(elem)
-        #new_list.remove(el)
-    d= Counter(new_list)
+        # new_list.remove(el)
+    d = Counter(new_list)
     ilist.clear()
     for el in d.items():
         ilist.append(el[0])
 
     for el in ilist:
         count_list.append(fields[str(el)][0])
-    #print('ilist', ilist)
+    # print('ilist', ilist)
     proj_attr[0] = len(ilist)
     c = Counter(count_list)
     d = dict(sorted(c.items()))
-    #print('dddd',d)
+    # print('dddd',d)
     arr = []
     arr_tables = []
     for el in d.items():
         arr_tables.append(el[0])
         arr.append(el[1])
     proj_attr[1] = arr
-    #print(proj_attr[1])
-    #arr_tables.sort()
+    # print(proj_attr[1])
+    # arr_tables.sort()
     arr_string = []
     for tab in arr_tables:
         arr_string.append('0' * MAX_COLUMNS)
@@ -239,22 +241,24 @@ def PROJ_ATTR(query):
     print(proj_attr)
     return proj_attr
 
+
 def SEL_ATTR(query):
     sel_attr = [0, [0], [0]]
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
     print(parsed.tokens)
-    idx =0
-    f_list=[]
-    t_list=[]
-    arr=[]
-    for i in range(0,len(parsed.tokens)):
-        if(str(type(parsed.tokens[i]))=='<class \'sqlparse.sql.Where\'>'):
+    idx = 0
+    f_list = []
+    t_list = []
+    arr = []
+    for i in range(0, len(parsed.tokens)):
+        print(type(parsed.tokens[i]))
+        if (str(type(parsed.tokens[i])) == '<class \'sqlparse.sql.Where\'>'):
             idx = i
 
-    if idx!=0:
-        q = str(parsed.tokens[idx])
-        print(q)
+    if idx != 0:
+        # q = str(parsed.tokens[idx])
+        # print(q)
         tokenizer = RegexpTokenizer(r'\w+')
         tokens = tokenizer.tokenize(str(parsed.tokens[idx]))
         print('токены', tokens)
@@ -262,33 +266,32 @@ def SEL_ATTR(query):
             if fields.get(str(elem)):
                 f_list.append(elem)
 
-        if len(f_list)>0:
-            #print(f_list)
+        if len(f_list) > 0:
+            # print(f_list)
             c = Counter(f_list)
             f_list.clear()
             for el in c.items():
                 f_list.append(el[0])
 
-            sel_attr[0]=len(f_list)
+            sel_attr[0] = len(f_list)
             for el in f_list:
                 t_list.append(fields[el][0])
 
-            #print(t_list)
+            # print(t_list)
             c = Counter(t_list)
-            #print(c)
+            # print(c)
             d = dict(sorted(c.items()))
-            #print(d)
+            # print(d)
             t_list.clear()
             for el in d.items():
                 t_list.append(el[0])
                 arr.append(el[1])
 
-
-            #t_list.sort()
+            # t_list.sort()
             print(t_list)
-            #print(arr)
-            sel_attr[1]=arr
-            idx=0
+            # print(arr)
+            sel_attr[1] = arr
+            idx = 0
             arr_string = []
             for tab in t_list:
                 arr_string.append('0' * MAX_COLUMNS)
@@ -307,6 +310,190 @@ def SEL_ATTR(query):
     return sel_attr
 
 
+# НЕ РАБОТАЕТ С ПЕРЕНАЗНАЧЕННЫМИ ПОЛЯМИ
+def ORDER_ATTR(query):
+    order_attr = [0, [0], [0]]
+    query = sqlparse.format(query, reindent=True, keyword_case='upper')
+    parsed = sqlparse.parse(query)[0]
+    print(parsed.tokens)
+    idx = 0
+    f_list = []
+    t_list = []
+    arr = []
+    for i in range(0, len(parsed.tokens)):
+        # print(i,parsed.tokens[i].value)
+        if (str(parsed.tokens[i].value) == "ORDER BY"):
+            idx = i + 2
+
+    if idx != 0:
+        # q = str(parsed.tokens[idx])
+        # print(q)
+        tokenizer = RegexpTokenizer(r'\w+')
+        tokens = tokenizer.tokenize(str(parsed.tokens[idx]))
+        print('токены', tokens)
+        for elem in tokens:
+            if fields.get(str(elem)):
+                f_list.append(elem)
+
+        print(f_list)
+        if len(f_list) > 0:
+            # print(f_list)
+            c = Counter(f_list)
+            f_list.clear()
+            for el in c.items():
+                f_list.append(el[0])
+
+            order_attr[0] = len(f_list)
+            for el in f_list:
+                t_list.append(fields[el][0])
+
+                # print(t_list)
+                c = Counter(t_list)
+                # print(c)
+                d = dict(sorted(c.items()))
+                # print(d)
+                t_list.clear()
+                for el in d.items():
+                    t_list.append(el[0])
+                    arr.append(el[1])
+
+                # t_list.sort()
+                print(t_list)
+                # print(arr)
+                order_attr[1] = arr
+                idx = 0
+                arr_string = []
+                for tab in t_list:
+                    arr_string.append('0' * MAX_COLUMNS)
+                    for el in f_list:
+                        if fields.get(str(el)) and tab == str(fields[str(el)][0]):
+                            idx = fields[str(el)][1]
+                            arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
+
+                for el in arr_string:
+                    el = el[::-1]
+                    print(el)
+                    order_attr[2].append(int(el, 2))
+
+    print(order_attr)
+    return order_attr
+
+
+def GRPBY_ATTR(query):
+    grpby_attr = [0, [0], [0]]
+    query = sqlparse.format(query, reindent=True, keyword_case='upper')
+    parsed = sqlparse.parse(query)[0]
+    print(parsed.tokens)
+    idx = 0
+    f_list = []
+    t_list = []
+    arr = []
+    for i in range(0, len(parsed.tokens)):
+        # print(i,parsed.tokens[i].value)
+        if (str(parsed.tokens[i].value) == "GROUP BY"):
+            idx = i + 2
+
+    if idx != 0:
+        # q = str(parsed.tokens[idx])
+        # print(q)
+        tokenizer = RegexpTokenizer(r'\w+')
+        tokens = tokenizer.tokenize(str(parsed.tokens[idx]))
+        print('токены', tokens)
+        for elem in tokens:
+            if fields.get(str(elem)):
+                f_list.append(elem)
+
+        print(f_list)
+        if len(f_list) > 0:
+            # print(f_list)
+            c = Counter(f_list)
+            f_list.clear()
+            for el in c.items():
+                f_list.append(el[0])
+
+            grpby_attr[0] = len(f_list)
+            for el in f_list:
+                t_list.append(fields[el][0])
+
+                # print(t_list)
+                c = Counter(t_list)
+                # print(c)
+                d = dict(sorted(c.items()))
+                # print(d)
+                t_list.clear()
+                for el in d.items():
+                    t_list.append(el[0])
+                    arr.append(el[1])
+
+                # t_list.sort()
+                print(t_list)
+                # print(arr)
+                grpby_attr[1] = arr
+                idx = 0
+                arr_string = []
+                for tab in t_list:
+                    arr_string.append('0' * MAX_COLUMNS)
+                    for el in f_list:
+                        if fields.get(str(el)) and tab == str(fields[str(el)][0]):
+                            idx = fields[str(el)][1]
+                            arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
+
+                for el in arr_string:
+                    el = el[::-1]
+                    print(el)
+                    grpby_attr[2].append(int(el, 2))
+
+    print(grpby_attr)
+    return grpby_attr
+
+#Мысль больного разума. Он считает цифры в строковых значениях как числа. Как насчет сначала искать строки, потом их реплейсить, а потом искать числа
+def VALUE_CTR(query):
+    value_ctr = [0, 0, 0, 0, 0]
+    query = sqlparse.format(query, reindent=True, keyword_case='upper')
+    parsed = sqlparse.parse(query)[0]
+    #print(parsed.tokens)
+
+    print(query)
+    copy_query = query
+    strings = re.compile(r'[\'\"]([^\'\"]+)[\'\"][,\s)]?')
+    strings_list = strings.findall(copy_query)
+    print(strings_list)
+    print(len(strings_list))
+    if(len(strings_list))>0:
+        value_ctr[0]=len(strings_list)
+        s="".join(strings_list)
+        print(s)
+        value_ctr[1]=len(s)
+        #print(1)
+        for el in strings_list:
+            copy_query=copy_query.replace(str(el),"xxx")
+
+    copy_query = copy_query.replace("LIMIT ","xxx")
+
+    print('copy',copy_query)
+    #print(copy_query)
+    numeric = re.compile(r'[\s(]([\d.]+)[,\s)]?')
+    numeric_list = numeric.findall(copy_query)
+    print(numeric_list)
+    if len(numeric_list)>0:
+        value_ctr[2]=len(numeric_list)
+
+    joins = re.compile(r'\b(JOIN)\b')
+    joins_list = joins.findall(copy_query)
+    print(joins_list)
+    if len(joins_list)>0:
+        value_ctr[3]=len(joins_list)
+
+    ands = re.compile(r'\b(AND|OR)\b')
+    ands_list = ands.findall(copy_query)
+    if len(ands_list)>0:
+        value_ctr[4]=len(ands_list)
+
+    print(value_ctr)
+
+    return(value_ctr)
+
+
 def make_vector(field_num):
     return
 
@@ -318,9 +505,12 @@ def query_preparation(query):
     #query = "SELECT ca_id, ca_bal, COALESCE(SUM(hs_qty * lt_price),0) AS price_sum FROM customer_account LEFT OUTER JOIN holding_summary ON hs_ca_id = ca_id, last_trade WHERE ca_c_id = 4300002890 AND lt_s_symb = hs_s_symb GROUP BY ca_id,ca_bal ORDER BY price_sum ASC LIMIT 10"
 
     # sql_cmd = SQL_CMD(query)
-    #proj_rel_dec = PROJ_REL(query)
-    #proj_attr_dec= PROJ_ATTR(query)
-    SEL_ATTR(query)
+    # proj_rel_dec = PROJ_REL(query)
+    # proj_attr_dec = PROJ_ATTR(query)
+    #sel_attr_dec = SEL_ATTR(query)
+    #order_attr_dec = ORDER_ATTR(query)
+    #grpby_attr_dec = GRPBY_ATTR(query)
+    value_ctr =VALUE_CTR(query)
 
 
 def make_binary_vector(select_list, insert_list, update_list, delete_list):
