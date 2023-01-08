@@ -9,6 +9,7 @@ from sqlparse.sql import IdentifierList, TokenList, Parenthesis
 from nltk.tokenize import RegexpTokenizer
 
 MAX_COLUMNS = 30
+NUM_TABLES = 34
 path = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\raw_logs.txt'
 path_result = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\cutted_queries.csv'
 tables = {'account_permission': 0, 'address': 1, 'broker': 2, 'cash_transaction': 3, 'charge': 4, 'commission_rate': 5,
@@ -115,7 +116,7 @@ fields = {'ap_ca_id': ['account_permission', 0], 'ap_acl': ['account_permission'
 # Заметка про МЕТОД1. Там у нас есть еще одна таблица y test с правильными значениями.
 # И после классификации получившийся y_test сравнивается с ней.
 
-#ЗАМЕТКА.  ВСЕ процедуры с векторами надо переделать, чтобы второй массив включал в себя все таблицы, а не только использованные.
+# ЗАМЕТКА.  ВСЕ процедуры с векторами надо переделать, чтобы второй массив включал в себя все таблицы, а не только использованные.
 
 def transaction_numbering(data):
     num = 0
@@ -153,7 +154,8 @@ def SQL_CMD(query):
 def PROJ_REL(query):
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     proj_rel = [0, 0]
-    proj_rel[1] = '0000000000000000000000000000000000'
+    arr_string = []
+    arr_string.append('0' * NUM_TABLES)
     parsed = sqlparse.parse(query)[0]
     t = parsed.tokens[0].value
     proj_rel[0] = len(list(IdentifierList(TokenList(parsed.tokens[query_mode[t][1]])).get_identifiers()))
@@ -162,7 +164,9 @@ def PROJ_REL(query):
         print(str(el))
         idx = tables.get(str(el))
         if idx:
-            proj_rel[1] = proj_rel[1][:idx] + '1' + proj_rel[1][idx + 1:]
+            arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
+
+    proj_rel[1] = arr_string[0]
     print(proj_rel[1])
     proj_rel[1] = proj_rel[1][::-1]
     print(proj_rel[1])
@@ -216,27 +220,33 @@ def PROJ_ATTR(query):
     proj_attr[0] = len(ilist)
     c = Counter(count_list)
     d = dict(sorted(c.items()))
-    # print('dddd',d)
-    arr = []
-    arr_tables = []
+    t_list = []
+
     for el in d.items():
-        arr_tables.append(el[0])
-        arr.append(el[1])
-    proj_attr[1] = arr
-    # print(proj_attr[1])
-    # arr_tables.sort()
+        t_list.append(el[0])
+
+    table_string2 = []  ###
+    table_string2.append('0' * NUM_TABLES)  ###
+    table_vector3 = np.zeros(NUM_TABLES, int)  ###
     arr_string = []
-    for tab in arr_tables:
+    for tab in t_list:
         arr_string.append('0' * MAX_COLUMNS)
         for el in ilist:
             if fields.get(str(el)) and tab == str(fields[str(el)][0]):
+                tab_idx = tables[tab]  ###
+                table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
+                                   table_string2[0][tab_idx + 1:]  ###
                 idx = fields[str(el)][1]
                 arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
-    for el in arr_string:
-        el = el[::-1]
-        print(el)
-        proj_attr[2].append(int(el, 2))
+        arr_string[-1] = arr_string[-1][::-1]
+        table_vector3[tables[tab]] = int(arr_string[-1], 2)
+
+    print('table string', table_string2)
+    print('vector3', table_vector3)
+    proj_attr[1] = [int(item) for item in table_string2[0]]  ###
+    proj_attr[2] = table_vector3
+    proj_attr[2] = list(proj_attr[2])
 
     print(proj_attr)
     return proj_attr
@@ -252,16 +262,19 @@ def SEL_ATTR(query):
     t_list = []
     arr = []
     for i in range(0, len(parsed.tokens)):
-        print(type(parsed.tokens[i]))
         if (str(type(parsed.tokens[i])) == '<class \'sqlparse.sql.Where\'>'):
             idx = i
+
+    table_string2 = []  ###
+    table_string2.append('0' * NUM_TABLES)  ###
+    table_vector3 = np.zeros(NUM_TABLES, int)  ###
 
     if idx != 0:
         # q = str(parsed.tokens[idx])
         # print(q)
         tokenizer = RegexpTokenizer(r'\w+')
         tokens = tokenizer.tokenize(str(parsed.tokens[idx]))
-        print('токены', tokens)
+        # print('токены', tokens)
         for elem in tokens:
             if fields.get(str(elem)):
                 f_list.append(elem)
@@ -279,7 +292,6 @@ def SEL_ATTR(query):
 
             # print(t_list)
             c = Counter(t_list)
-            # print(c)
             d = dict(sorted(c.items()))
             # print(d)
             t_list.clear()
@@ -287,23 +299,29 @@ def SEL_ATTR(query):
                 t_list.append(el[0])
                 arr.append(el[1])
 
-            # t_list.sort()
             print(t_list)
-            # print(arr)
-            sel_attr[1] = arr
+
             idx = 0
             arr_string = []
+            print(f_list)
             for tab in t_list:
                 arr_string.append('0' * MAX_COLUMNS)
                 for el in f_list:
                     if fields.get(str(el)) and tab == str(fields[str(el)][0]):
+                        tab_idx = tables[tab]  ###
+                        table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
+                                           table_string2[0][tab_idx + 1:]  ###
                         idx = fields[str(el)][1]
                         arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
-            for el in arr_string:
-                el = el[::-1]
-                print(el)
-                sel_attr[2].append(int(el, 2))
+                arr_string[-1] = arr_string[-1][::-1]  ###
+                table_vector3[tables[tab]] = int(arr_string[-1], 2)  ###
+
+            print('table string', table_string2)
+            print('vector3', table_vector3)
+    sel_attr[1] = [int(item) for item in table_string2[0]]  ###
+    sel_attr[2] = table_vector3
+    sel_attr[2] = list(sel_attr[2])
 
     print(sel_attr)
 
@@ -319,11 +337,14 @@ def ORDER_ATTR(query):
     idx = 0
     f_list = []
     t_list = []
-    arr = []
     for i in range(0, len(parsed.tokens)):
         # print(i,parsed.tokens[i].value)
         if (str(parsed.tokens[i].value) == "ORDER BY"):
             idx = i + 2
+
+    table_string2 = []  ###
+    table_string2.append('0' * NUM_TABLES)  ###
+    table_vector3 = np.zeros(NUM_TABLES, int)  ###
 
     if idx != 0:
         # q = str(parsed.tokens[idx])
@@ -355,25 +376,27 @@ def ORDER_ATTR(query):
                 t_list.clear()
                 for el in d.items():
                     t_list.append(el[0])
-                    arr.append(el[1])
 
                 # t_list.sort()
                 print(t_list)
-                # print(arr)
-                order_attr[1] = arr
                 idx = 0
                 arr_string = []
                 for tab in t_list:
                     arr_string.append('0' * MAX_COLUMNS)
                     for el in f_list:
                         if fields.get(str(el)) and tab == str(fields[str(el)][0]):
+                            tab_idx = tables[tab]  ###
+                            table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
+                                               table_string2[0][tab_idx + 1:]  ###
                             idx = fields[str(el)][1]
                             arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
-                for el in arr_string:
-                    el = el[::-1]
-                    print(el)
-                    order_attr[2].append(int(el, 2))
+                    arr_string[-1] = arr_string[-1][::-1]  ###
+                    table_vector3[tables[tab]] = int(arr_string[-1], 2)  ###
+
+    order_attr[1] = [int(item) for item in table_string2[0]]  ###
+    order_attr[2] = table_vector3
+    order_attr[2] = list(order_attr[2])
 
     print(order_attr)
     return order_attr
@@ -387,11 +410,14 @@ def GRPBY_ATTR(query):
     idx = 0
     f_list = []
     t_list = []
-    arr = []
     for i in range(0, len(parsed.tokens)):
         # print(i,parsed.tokens[i].value)
         if (str(parsed.tokens[i].value) == "GROUP BY"):
             idx = i + 2
+
+    table_string2 = []  ###
+    table_string2.append('0' * NUM_TABLES)  ###
+    table_vector3 = np.zeros(NUM_TABLES, int)  ###
 
     if idx != 0:
         # q = str(parsed.tokens[idx])
@@ -423,35 +449,40 @@ def GRPBY_ATTR(query):
                 t_list.clear()
                 for el in d.items():
                     t_list.append(el[0])
-                    arr.append(el[1])
 
                 # t_list.sort()
                 print(t_list)
                 # print(arr)
-                grpby_attr[1] = arr
+
                 idx = 0
                 arr_string = []
                 for tab in t_list:
                     arr_string.append('0' * MAX_COLUMNS)
                     for el in f_list:
                         if fields.get(str(el)) and tab == str(fields[str(el)][0]):
+                            tab_idx = tables[tab]  ###
+                            table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
+                                               table_string2[0][tab_idx + 1:]  ###
                             idx = fields[str(el)][1]
                             arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
-                for el in arr_string:
-                    el = el[::-1]
-                    print(el)
-                    grpby_attr[2].append(int(el, 2))
+                    arr_string[-1] = arr_string[-1][::-1]  ###
+                    table_vector3[tables[tab]] = int(arr_string[-1], 2)  ###
+
+    grpby_attr[1] = [int(item) for item in table_string2[0]]  ###
+    grpby_attr[2] = table_vector3
+    grpby_attr[2] = list(grpby_attr[2])
 
     print(grpby_attr)
     return grpby_attr
 
-#Мысль больного разума. Он считает цифры в строковых значениях как числа. Как насчет сначала искать строки, потом их реплейсить, а потом искать числа
+
+# Мысль больного разума. Он считает цифры в строковых значениях как числа. Как насчет сначала искать строки, потом их реплейсить, а потом искать числа
 def VALUE_CTR(query):
     value_ctr = [0, 0, 0, 0, 0]
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
-    #print(parsed.tokens)
+    # print(parsed.tokens)
 
     print(query)
     copy_query = query
@@ -459,58 +490,66 @@ def VALUE_CTR(query):
     strings_list = strings.findall(copy_query)
     print(strings_list)
     print(len(strings_list))
-    if(len(strings_list))>0:
-        value_ctr[0]=len(strings_list)
-        s="".join(strings_list)
+    if (len(strings_list)) > 0:
+        value_ctr[0] = len(strings_list)
+        s = "".join(strings_list)
         print(s)
-        value_ctr[1]=len(s)
-        #print(1)
+        value_ctr[1] = len(s)
+        # print(1)
         for el in strings_list:
-            copy_query=copy_query.replace(str(el),"xxx")
+            copy_query = copy_query.replace(str(el), "xxx")
 
-    copy_query = copy_query.replace("LIMIT ","xxx")
+    copy_query = copy_query.replace("LIMIT ", "xxx")
 
-    print('copy',copy_query)
-    #print(copy_query)
+    print('copy', copy_query)
+    # print(copy_query)
     numeric = re.compile(r'[\s(]([\d.]+)[,\s)]?')
     numeric_list = numeric.findall(copy_query)
     print(numeric_list)
-    if len(numeric_list)>0:
-        value_ctr[2]=len(numeric_list)
+    if len(numeric_list) > 0:
+        value_ctr[2] = len(numeric_list)
 
     joins = re.compile(r'\b(JOIN)\b')
     joins_list = joins.findall(copy_query)
     print(joins_list)
-    if len(joins_list)>0:
-        value_ctr[3]=len(joins_list)
+    if len(joins_list) > 0:
+        value_ctr[3] = len(joins_list)
 
     ands = re.compile(r'\b(AND|OR)\b')
     ands_list = ands.findall(copy_query)
-    if len(ands_list)>0:
-        value_ctr[4]=len(ands_list)
+    if len(ands_list) > 0:
+        value_ctr[4] = len(ands_list)
 
     print(value_ctr)
 
-    return(value_ctr)
+    return (value_ctr)
 
 
-def make_vector(field_num):
-    return
 
+def query_preprocessing(query):
+    # query = "UPDATE last_trade SET lt_price = 28.31, lt_vol = lt_vol + 325, lt_dts = '2022-12-23 18:14:12' WHERE lt_s_symb = 'FCCY'"
+    query = "INSERT INTO cash_transaction(ct_dts, ct_t_id, ct_amt, ct_name) VALUES('2022-12-23 18:14:12.000000', 200000008727371, 10595.7, 'Limit-Sell 400 shared of COMMON of IES Utilities, Inc.')"
+    # query = "SELECT b_name, SUM(tr_qty * tr_bid_price) AS price_sum FROM trade_request, sector, industry, company, broker, security WHERE tr_b_id = b_id AND tr_s_symb = s_symb AND s_co_id = co_id AND co_in_id = in_id AND sc_id = in_sc_id AND b_name IN ('Alfred L. Laurey', 'Leonard J. Ridpath', 'Sylvia P. Stieff', 'Stefania L. Junk', 'Albert V. Medler', 'Albert Z. Titlow', 'Wayne L. Warney', 'Donald A. Gunsolus', 'Carrie G. Sheffey', 'Jo W. Lyng', 'Joseph D. Lofties', 'Vincent U. Tena', 'Michael X. Gramlich', 'Floretta E. Coner', 'Elizabeth O. Peli', 'Chris I. Triveno', 'Mabel G. Clawson', 'Clint G. Lindenpitz', 'Walter M. Attaway', 'David N. Kallenberger', 'Betty K. Hoffner', 'Pedro P. Kovarovic', 'Raymond N. Pullman', 'Juanita K. Reddout') AND sc_name = 'Transportation' GROUP BY b_name ORDER BY price_sum DESC"
+    # query = "SELECT ca_id, ca_bal, COALESCE(SUM(hs_qty * lt_price),0) AS price_sum FROM customer_account LEFT OUTER JOIN holding_summary ON hs_ca_id = ca_id, last_trade WHERE ca_c_id = 4300002890 AND lt_s_symb = hs_s_symb GROUP BY ca_id,ca_bal ORDER BY price_sum ASC LIMIT 10"
+    sql_cmd,proj_rel_dec,proj_attr_dec,sel_attr_dec,order_attr_dec,grpby_attr_dec,value_ctr =feature_extractor(query)
+    Q=make_vector_Q(sql_cmd,proj_rel_dec,proj_attr_dec,sel_attr_dec,order_attr_dec,grpby_attr_dec,value_ctr)
+    print(Q)
+    print(len(Q))
+    return Q
 
-def query_preparation(query):
-    query = "UPDATE last_trade SET lt_price = 28.31, lt_vol = lt_vol + 325, lt_dts = '2022-12-23 18:14:12' WHERE lt_s_symb = 'FCCY'"
-    #query = "INSERT INTO cash_transaction(ct_dts, ct_t_id, ct_amt, ct_name) VALUES('2022-12-23 18:14:12.000000', 200000008727371, 10595.7, 'Limit-Sell 400 shared of COMMON of IES Utilities, Inc.')"
-    #query = "SELECT b_name, SUM(tr_qty * tr_bid_price) AS price_sum FROM trade_request, sector, industry, company, broker, security WHERE tr_b_id = b_id AND tr_s_symb = s_symb AND s_co_id = co_id AND co_in_id = in_id AND sc_id = in_sc_id AND b_name IN ('Alfred L. Laurey', 'Leonard J. Ridpath', 'Sylvia P. Stieff', 'Stefania L. Junk', 'Albert V. Medler', 'Albert Z. Titlow', 'Wayne L. Warney', 'Donald A. Gunsolus', 'Carrie G. Sheffey', 'Jo W. Lyng', 'Joseph D. Lofties', 'Vincent U. Tena', 'Michael X. Gramlich', 'Floretta E. Coner', 'Elizabeth O. Peli', 'Chris I. Triveno', 'Mabel G. Clawson', 'Clint G. Lindenpitz', 'Walter M. Attaway', 'David N. Kallenberger', 'Betty K. Hoffner', 'Pedro P. Kovarovic', 'Raymond N. Pullman', 'Juanita K. Reddout') AND sc_name = 'Transportation' GROUP BY b_name ORDER BY price_sum DESC"
-    #query = "SELECT ca_id, ca_bal, COALESCE(SUM(hs_qty * lt_price),0) AS price_sum FROM customer_account LEFT OUTER JOIN holding_summary ON hs_ca_id = ca_id, last_trade WHERE ca_c_id = 4300002890 AND lt_s_symb = hs_s_symb GROUP BY ca_id,ca_bal ORDER BY price_sum ASC LIMIT 10"
+def feature_extractor(query):
+    sql_cmd = np.hstack(SQL_CMD(query))
+    proj_rel_dec = np.hstack(PROJ_REL(query))
+    proj_attr_dec = np.hstack(PROJ_ATTR(query))
+    sel_attr_dec = np.hstack(SEL_ATTR(query))
+    order_attr_dec = np.hstack(ORDER_ATTR(query))
+    grpby_attr_dec = np.hstack(GRPBY_ATTR(query))
+    value_ctr = np.hstack(VALUE_CTR(query))
+    return sql_cmd,proj_rel_dec,proj_attr_dec,sel_attr_dec,order_attr_dec,grpby_attr_dec,value_ctr
 
-    # sql_cmd = SQL_CMD(query)
-    # proj_rel_dec = PROJ_REL(query)
-    # proj_attr_dec = PROJ_ATTR(query)
-    #sel_attr_dec = SEL_ATTR(query)
-    #order_attr_dec = ORDER_ATTR(query)
-    #grpby_attr_dec = GRPBY_ATTR(query)
-    value_ctr =VALUE_CTR(query)
+def make_vector_Q(sql_cmd,proj_rel_dec,proj_attr_dec,sel_attr_dec,order_attr_dec,grpby_attr_dec,value_ctr):
+
+    return np.hstack([sql_cmd,proj_rel_dec,proj_attr_dec,sel_attr_dec,order_attr_dec,grpby_attr_dec,value_ctr])
 
 
 def make_binary_vector(select_list, insert_list, update_list, delete_list):
@@ -558,4 +597,4 @@ if __name__ == '__main__':
     data.columns = ["transaction", "query"]
     # print(data)
     # transaction_iterator(data)
-    query_preparation("Se")
+    query_preprocessing("qw")
