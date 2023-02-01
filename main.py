@@ -5,6 +5,7 @@ import pandas as pd
 import re
 import regex
 import sqlparse
+from sklearn.cluster import KMeans
 from sqlparse.sql import IdentifierList, TokenList, Parenthesis
 from nltk.tokenize import RegexpTokenizer
 
@@ -12,6 +13,7 @@ MAX_COLUMNS = 30
 NUM_TABLES = 34
 path = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\raw_logs.txt'
 path_result = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\cutted_queries.csv'
+path_Hex_vector ='C:\\Users\\user\\Desktop\\query_logs\\processing\\hex_vectors.csv'
 tables = {'account_permission': 0, 'address': 1, 'broker': 2, 'cash_transaction': 3, 'charge': 4, 'commission_rate': 5,
           'company': 6, 'company_competitor': 7, 'customer': 8,
           'customer_account': 9, 'customer_taxrate': 10, 'daily_market': 11, 'exchange': 12, 'financial': 13,
@@ -23,6 +25,9 @@ tables = {'account_permission': 0, 'address': 1, 'broker': 2, 'cash_transaction'
 
 # [0]- тип запроса [1] - индекс листа с таблицами [2] - индекс листа с полями
 query_mode = {'SELECT': [1, 6, 2], 'INSERT': [2, 4, 4], 'UPDATE': [3, 2, 6], 'DELETE': [4, 4]}
+tabu_list = ['SELECT LAST_INSERT_ID()', 'SET TRANSACTION ISOLATION LEVEL READ COMMITTED',
+             'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ', 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE',
+             'rollback']
 
 fields = {'ap_ca_id': ['account_permission', 0], 'ap_acl': ['account_permission', 1],
           'ap_tax_id': ['account_permission', 2],
@@ -120,25 +125,51 @@ fields = {'ap_ca_id': ['account_permission', 0], 'ap_acl': ['account_permission'
 
 def transaction_numbering(data):
     num = 0
+    last = data.last_valid_index()
+
     for index, rows in data.iterrows():
-        if (data.loc[index]['query'] == 'commit'):
-            # print(index)
-            num = num + 1
+        if(index!=last):
+            if (data.loc[index]['query'] == 'commit'):
+                if(data.loc[index+1]['query'] != 'commit'):
+                    num = num + 1
+                else:
+                    data.drop([index])
         rows['transaction'] = num
-    # print(data)
+        print(rows['transaction'])
+    #return data
 
+def transaction_iterator(data):
+    count = data['transaction'].max()
+    print(count)
 
-# def transaction_iterator(data):
-#     count = data['transaction'].max()
-#     print(count)
-#     # for i in range (1,count):
-#     i = 5
-#     select_list = looking_select(data[np.logical_and(data['transaction'] == i, 1)])
-#     insert_list = looking_insert(data[np.logical_and(data['transaction'] == i, 1)])
-#     update_list = looking_update(data[np.logical_and(data['transaction'] == i, 1)])
-#     delete_list = looking_delete(data[np.logical_and(data['transaction'] == i, 1)])
-#     make_binary_vector(select_list, insert_list, update_list, delete_list)
-#     # break
+    ############ НА ВРЕМЯ
+    count=10
+
+    new_data_list = []
+    #tabu_list =['commit','SELECT LAST_INSERT_ID()','SET TRANSACTION ISOLATION LEVEL READ COMMITTED','SET TRANSACTION ISOLATION LEVEL REPEATABLE READ','SET TRANSACTION ISOLATION LEVEL SERIALIZABLE','rollback']
+    for i in range (1,count):
+        queries =data.loc[data['transaction']==i]
+        vector = ""
+        for index,rows in queries.iterrows():
+            if rows['query'] not in tabu_list and not "commit":
+                print('QUERY',i,index,rows['query'])
+                #if(i==3 & index==46): #удалить нахрен условие
+                vector = vector +str(query_preprocessing(rows['query']))+" "
+        # s = " ".join(vector)
+        # s = s.replace(" ", "")
+        # s = s.replace("[", "")
+        # s = s.replace("]", "")
+        # s = s.replace("\n", "")
+        # s = s.replace("@", " ")
+        # new_data_list.append(s)
+        new_data_list.append(vector)
+    print(new_data_list)
+    # f= open("C:\\Users\\user\\Desktop\\query_logs\\processing\\data.txt",'w+')
+    # for el in new_data_list:
+    #     print(el,file=f)
+    # f.close()
+    #df = pd.DataFrame(new_data_list)
+    #df.to_csv(path_Hex_vector, index=False, header=False)
 
 
 def SQL_CMD(query):
@@ -158,18 +189,24 @@ def PROJ_REL(query):
     arr_string.append('0' * NUM_TABLES)
     parsed = sqlparse.parse(query)[0]
     t = parsed.tokens[0].value
-    proj_rel[0] = len(list(IdentifierList(TokenList(parsed.tokens[query_mode[t][1]])).get_identifiers()))
-    print(proj_rel[0])
-    for el in IdentifierList(TokenList(parsed.tokens[query_mode[t][1]])).get_identifiers():
-        print(str(el))
-        idx = tables.get(str(el))
-        if idx:
-            arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
+    idx = 0
+    for i in range(0, len(parsed.tokens)):
+        if (str(type(parsed.tokens[i].value)) == 'FROM'):
+            idx=i+2
+
+    if idx!=0:
+        proj_rel[0] = len(list(IdentifierList(TokenList(parsed.tokens[idx])).get_identifiers()))
+    #print(proj_rel[0])
+        for el in IdentifierList(TokenList(parsed.tokens[query_mode[t][1]])).get_identifiers():
+        #print(str(el))
+            indx = tables.get(str(el))
+            if indx:
+                arr_string[-1] = arr_string[-1][:indx] + '1' + arr_string[-1][indx + 1:]
 
     proj_rel[1] = arr_string[0]
-    print(proj_rel[1])
+    #print(proj_rel[1])
     proj_rel[1] = proj_rel[1][::-1]
-    print(proj_rel[1])
+    #print(proj_rel[1])
     proj_rel[1] = int(proj_rel[1], 2)
     print(proj_rel)
     return proj_rel
@@ -179,21 +216,29 @@ def PROJ_ATTR(query):
     proj_attr = [0, [0], [0]]
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
-    print(parsed.tokens)
+    #print(parsed.tokens)
     t = parsed.tokens[0].value
     attributes = []
     ilist = []
     if t == 'INSERT':
-        attributes = parsed.tokens[query_mode[t][2]][1]
-        l = list(IdentifierList(TokenList(attributes)).get_identifiers())
-        ilist = l[1]
+        res = re.findall(r'\((.*?)\)',str(parsed.tokens[query_mode[t][2]]))
+        #print(str(res))
+        ilist = str(res).split(',')
 
         ##
-        ilist = list(ilist.get_identifiers())
+        #ilist = list(ilist.get_identifiers())
         ##
     else:
-        attributes = parsed.tokens[query_mode[t][2]]
-        ilist = list(IdentifierList(TokenList(attributes)).get_identifiers())
+        if t =='DELETE':
+            table_string2 = []
+            table_string2.append('0' * NUM_TABLES)
+            proj_attr[1] = [int(item) for item in table_string2[0]]
+            table_vector3 = np.zeros(NUM_TABLES, int)  ###
+            proj_attr[2] = list(table_vector3)
+            return proj_attr
+        else:
+            attributes = parsed.tokens[query_mode[t][2]]
+            ilist = list(IdentifierList(TokenList(attributes)).get_identifiers())
 
     count_list = []
     # for el in ilist.get_identifiers():
@@ -202,9 +247,9 @@ def PROJ_ATTR(query):
     for el in copy_ilist:
         # if not fields.get(str(el)):
         tokenizer = RegexpTokenizer(r'\w+')
-        print('Обработка', str(el))
+        #print('Обработка', str(el))
         tokens = tokenizer.tokenize(str(el))
-        print('токены', tokens)
+        #print('токены', tokens)
         for elem in tokens:
             if fields.get(str(elem)):
                 new_list.append(elem)
@@ -242,8 +287,8 @@ def PROJ_ATTR(query):
         arr_string[-1] = arr_string[-1][::-1]
         table_vector3[tables[tab]] = int(arr_string[-1], 2)
 
-    print('table string', table_string2)
-    print('vector3', table_vector3)
+    #print('table string', table_string2)
+    #print('vector3', table_vector3)
     proj_attr[1] = [int(item) for item in table_string2[0]]  ###
     proj_attr[2] = table_vector3
     proj_attr[2] = list(proj_attr[2])
@@ -256,7 +301,7 @@ def SEL_ATTR(query):
     sel_attr = [0, [0], [0]]
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
-    print(parsed.tokens)
+    #print(parsed.tokens)
     idx = 0
     f_list = []
     t_list = []
@@ -299,11 +344,11 @@ def SEL_ATTR(query):
                 t_list.append(el[0])
                 arr.append(el[1])
 
-            print(t_list)
+            #print(t_list)
 
             idx = 0
             arr_string = []
-            print(f_list)
+            #print(f_list)
             for tab in t_list:
                 arr_string.append('0' * MAX_COLUMNS)
                 for el in f_list:
@@ -317,8 +362,8 @@ def SEL_ATTR(query):
                 arr_string[-1] = arr_string[-1][::-1]  ###
                 table_vector3[tables[tab]] = int(arr_string[-1], 2)  ###
 
-            print('table string', table_string2)
-            print('vector3', table_vector3)
+            #print('table string', table_string2)
+            #print('vector3', table_vector3)
     sel_attr[1] = [int(item) for item in table_string2[0]]  ###
     sel_attr[2] = table_vector3
     sel_attr[2] = list(sel_attr[2])
@@ -333,7 +378,7 @@ def ORDER_ATTR(query):
     order_attr = [0, [0], [0]]
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
-    print(parsed.tokens)
+    #print(parsed.tokens)
     idx = 0
     f_list = []
     t_list = []
@@ -351,12 +396,12 @@ def ORDER_ATTR(query):
         # print(q)
         tokenizer = RegexpTokenizer(r'\w+')
         tokens = tokenizer.tokenize(str(parsed.tokens[idx]))
-        print('токены', tokens)
+        #print('токены', tokens)
         for elem in tokens:
             if fields.get(str(elem)):
                 f_list.append(elem)
 
-        print(f_list)
+        #print(f_list)
         if len(f_list) > 0:
             # print(f_list)
             c = Counter(f_list)
@@ -378,7 +423,7 @@ def ORDER_ATTR(query):
                     t_list.append(el[0])
 
                 # t_list.sort()
-                print(t_list)
+                #print(t_list)
                 idx = 0
                 arr_string = []
                 for tab in t_list:
@@ -406,7 +451,7 @@ def GRPBY_ATTR(query):
     grpby_attr = [0, [0], [0]]
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
-    print(parsed.tokens)
+    #print(parsed.tokens)
     idx = 0
     f_list = []
     t_list = []
@@ -424,12 +469,12 @@ def GRPBY_ATTR(query):
         # print(q)
         tokenizer = RegexpTokenizer(r'\w+')
         tokens = tokenizer.tokenize(str(parsed.tokens[idx]))
-        print('токены', tokens)
+        #print('токены', tokens)
         for elem in tokens:
             if fields.get(str(elem)):
                 f_list.append(elem)
 
-        print(f_list)
+        #print(f_list)
         if len(f_list) > 0:
             # print(f_list)
             c = Counter(f_list)
@@ -451,7 +496,7 @@ def GRPBY_ATTR(query):
                     t_list.append(el[0])
 
                 # t_list.sort()
-                print(t_list)
+                #print(t_list)
                 # print(arr)
 
                 idx = 0
@@ -484,16 +529,16 @@ def VALUE_CTR(query):
     parsed = sqlparse.parse(query)[0]
     # print(parsed.tokens)
 
-    print(query)
+    #print(query)
     copy_query = query
     strings = re.compile(r'[\'\"]([^\'\"]+)[\'\"][,\s)]?')
     strings_list = strings.findall(copy_query)
-    print(strings_list)
-    print(len(strings_list))
+    #print(strings_list)
+    #print(len(strings_list))
     if (len(strings_list)) > 0:
         value_ctr[0] = len(strings_list)
         s = "".join(strings_list)
-        print(s)
+        #print(s)
         value_ctr[1] = len(s)
         # print(1)
         for el in strings_list:
@@ -501,17 +546,17 @@ def VALUE_CTR(query):
 
     copy_query = copy_query.replace("LIMIT ", "xxx")
 
-    print('copy', copy_query)
+    #print('copy', copy_query)
     # print(copy_query)
     numeric = re.compile(r'[\s(]([\d.]+)[,\s)]?')
     numeric_list = numeric.findall(copy_query)
-    print(numeric_list)
+    #print(numeric_list)
     if len(numeric_list) > 0:
         value_ctr[2] = len(numeric_list)
 
     joins = re.compile(r'\b(JOIN)\b')
     joins_list = joins.findall(copy_query)
-    print(joins_list)
+    #print(joins_list)
     if len(joins_list) > 0:
         value_ctr[3] = len(joins_list)
 
@@ -525,17 +570,18 @@ def VALUE_CTR(query):
     return (value_ctr)
 
 
-
 def query_preprocessing(query):
     # query = "UPDATE last_trade SET lt_price = 28.31, lt_vol = lt_vol + 325, lt_dts = '2022-12-23 18:14:12' WHERE lt_s_symb = 'FCCY'"
-    query = "INSERT INTO cash_transaction(ct_dts, ct_t_id, ct_amt, ct_name) VALUES('2022-12-23 18:14:12.000000', 200000008727371, 10595.7, 'Limit-Sell 400 shared of COMMON of IES Utilities, Inc.')"
+    #query = "INSERT INTO cash_transaction(ct_dts, ct_t_id, ct_amt, ct_name) VALUES('2022-12-23 18:14:12.000000', 200000008727371, 10595.7, 'Limit-Sell 400 shared of COMMON of IES Utilities, Inc.')"
     # query = "SELECT b_name, SUM(tr_qty * tr_bid_price) AS price_sum FROM trade_request, sector, industry, company, broker, security WHERE tr_b_id = b_id AND tr_s_symb = s_symb AND s_co_id = co_id AND co_in_id = in_id AND sc_id = in_sc_id AND b_name IN ('Alfred L. Laurey', 'Leonard J. Ridpath', 'Sylvia P. Stieff', 'Stefania L. Junk', 'Albert V. Medler', 'Albert Z. Titlow', 'Wayne L. Warney', 'Donald A. Gunsolus', 'Carrie G. Sheffey', 'Jo W. Lyng', 'Joseph D. Lofties', 'Vincent U. Tena', 'Michael X. Gramlich', 'Floretta E. Coner', 'Elizabeth O. Peli', 'Chris I. Triveno', 'Mabel G. Clawson', 'Clint G. Lindenpitz', 'Walter M. Attaway', 'David N. Kallenberger', 'Betty K. Hoffner', 'Pedro P. Kovarovic', 'Raymond N. Pullman', 'Juanita K. Reddout') AND sc_name = 'Transportation' GROUP BY b_name ORDER BY price_sum DESC"
     # query = "SELECT ca_id, ca_bal, COALESCE(SUM(hs_qty * lt_price),0) AS price_sum FROM customer_account LEFT OUTER JOIN holding_summary ON hs_ca_id = ca_id, last_trade WHERE ca_c_id = 4300002890 AND lt_s_symb = hs_s_symb GROUP BY ca_id,ca_bal ORDER BY price_sum ASC LIMIT 10"
-    sql_cmd,proj_rel_dec,proj_attr_dec,sel_attr_dec,order_attr_dec,grpby_attr_dec,value_ctr =feature_extractor(query)
-    Q=make_vector_Q(sql_cmd,proj_rel_dec,proj_attr_dec,sel_attr_dec,order_attr_dec,grpby_attr_dec,value_ctr)
-    print(Q)
+    sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr = feature_extractor(query)
+    Q = make_vector_Q(sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr)
+    #print(Q)
     print(len(Q))
     return Q
+
+
 
 def feature_extractor(query):
     sql_cmd = np.hstack(SQL_CMD(query))
@@ -545,33 +591,12 @@ def feature_extractor(query):
     order_attr_dec = np.hstack(ORDER_ATTR(query))
     grpby_attr_dec = np.hstack(GRPBY_ATTR(query))
     value_ctr = np.hstack(VALUE_CTR(query))
-    return sql_cmd,proj_rel_dec,proj_attr_dec,sel_attr_dec,order_attr_dec,grpby_attr_dec,value_ctr
-
-def make_vector_Q(sql_cmd,proj_rel_dec,proj_attr_dec,sel_attr_dec,order_attr_dec,grpby_attr_dec,value_ctr):
-
-    return np.hstack([sql_cmd,proj_rel_dec,proj_attr_dec,sel_attr_dec,order_attr_dec,grpby_attr_dec,value_ctr])
+    return sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr
 
 
-def make_binary_vector(select_list, insert_list, update_list, delete_list):
-    query = np.zeros((4, 34))
+def make_vector_Q(sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr):
+    return np.hstack([sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr])
 
-    if select_list:
-        for el in select_list:
-            query[0][tables[el]] = 1
-
-    if insert_list:
-        for el in insert_list:
-            query[1][tables[el]] = 1
-
-    if update_list:
-        for el in update_list:
-            query[2][tables[el]] = 1
-
-    if delete_list:
-        for el in delete_list:
-            query[0][tables[el]] = 1
-
-    print(query)
 
 
 def cut_query_from_log():
@@ -581,20 +606,35 @@ def cut_query_from_log():
     # data = data.reset_index()
     # data.drop('transaction', axis=1, inplace=True)
     transaction_numbering(data)
+    print(data)
     data['query'].replace('', np.nan, inplace=True)
     data.dropna(subset=['query'], inplace=True)
-    # print(data)
+    data.insert(1, "role", 0)
+
+
+    for index, rows in data.iterrows():
+        if rows['query'] in tabu_list:
+            data.drop([index],inplace=True)
+    print(data)
     data.to_csv(path_result, index=False, header=False)
 
 
 if __name__ == '__main__':
-    # РАСКОМЕНТИТЬ
-    # cut_query_from_log()
+    #РАСКОМЕНТИТЬ
+    cut_query_from_log()
+
+    # X = np.array([[1, 2,0], [1, 4,45], [1, 0,77],[10, 2,5], [10, 4,11], [10, 0,45]])
+    # kmeans = KMeans(n_clusters=2, random_state=0, n_init="auto").fit(X)
+    # print(X)
+    # #print(kmeans.labels_)
+    # #print(kmeans.predict([[0, 0,44], [12, 3,0]]))
+    # #print(kmeans.cluster_centers_)
+
+
 
     #####################
-
+    #
     data = pd.read_csv(path_result, sep=",", header=None)
-    data.columns = ["transaction", "query"]
-    # print(data)
-    # transaction_iterator(data)
-    query_preprocessing("qw")
+    data.columns = ["transaction",'role', "query"]
+    print(data)
+    #transaction_iterator(data)
