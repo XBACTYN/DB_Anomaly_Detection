@@ -12,9 +12,15 @@ from nltk.tokenize import RegexpTokenizer
 
 MAX_COLUMNS = 30
 NUM_TABLES = 34
-path = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\raw_logs.txt'
-path_result = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\cutted_queries.csv'
-path_Hex_vector ='C:\\Users\\user\\Desktop\\query_logs\\processing\\hex_vectors.csv'
+source_path1 = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\raw_logs.txt'
+source_path2 = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\raw_logs2.txt'
+
+path_result1 = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\cutted_queries.csv'
+path_result2 = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\cutted_queries2.csv'
+
+path_trainXvector1 ='C:\\Users\\user\\Desktop\\query_logs\\processing\\train_vectors1.csv'
+path_testXvector1 ='C:\\Users\\user\\Desktop\\query_logs\\processing\\test_vectors1.csv'
+
 transaction_matrix = np.array([
                       [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0],
                       [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,1,1,0,0,0,0,0],
@@ -156,20 +162,19 @@ def transaction_numbering(data):
         rows['transaction'] = num
         #print(rows['transaction'])
 
-def transaction_iterator(data):
+def transaction_iterator(data,path_result):
+    data.columns = ["transaction", 'role', "query"]
     # Создавать не матрицу а вектор.
     # Сравнение - отнимаем массивы. Считаем нули. И относим где максимально нулей. Коллизии попробовать решить по действию select,insert
-    df = pd.DataFrame()
     count = data['transaction'].max()
     print(count)
-    roles ={}
     ############ НА ВРЕМЯ
-    count=11
+    #count=11
     combo_list = []
     type_list =[]
     new_data_transactions = []
     new_data_vectors = []
-    for i in range (1,count):
+    for i in range (8,count):
         trans_num= i
         print('Транзакция ',trans_num)
         combo_list.clear()
@@ -186,14 +191,17 @@ def transaction_iterator(data):
         role_determinant(combo_list,type_list,trans_num)
     print(len(new_data_transactions))
     print(len(new_data_vectors))
-    #     if role == -1:
-    #         print("Нет совпадений")
-    #     else:
-    #         roles.update({str(trans_num):role})
-    #
-    # #print('roles d ',roles)
-    # role_distributor(data,roles)
-    #data.to_csv(path_Hex_vector, index=False, header=False)
+    roles_l = []
+    for el in (new_data_transactions):
+        roles_l.append(roles.get(str(el)))
+    print(roles_l)
+    print(roles)
+    print(new_data_transactions)
+
+    df = pd.DataFrame({'Transaction': new_data_transactions,'Role': roles_l,'Query_Vector': new_data_vectors})
+    print(df)
+    df.to_csv(path_result, index=False)
+
 
 def role_determinant(combo_list,type_list,trans_num):
     c = Counter(combo_list)
@@ -201,7 +209,7 @@ def role_determinant(combo_list,type_list,trans_num):
     combo_list.clear()
     for el in d.items():
         combo_list.append(el[0])
-    print(combo_list)
+    #print(combo_list)
     t = Counter(type_list)
     z = dict(sorted(t.items()))
     type_list.clear()
@@ -211,7 +219,7 @@ def role_determinant(combo_list,type_list,trans_num):
         else :
             type_list.append(i)
 
-    print('types\n', type_list)
+    #print('types\n', type_list)
 
     m = np.zeros(34, dtype=int)
     for el in combo_list:
@@ -226,7 +234,7 @@ def role_determinant(combo_list,type_list,trans_num):
     judge_array_2 = (result_2>=0).sum(1)
     mat = np.array([judge_array_2,judge_array])
     max_1 = max(mat[0])
-    print(max_1)
+    #print(max_1)
     ind, = np.where(mat[0]==max_1)
     best_arr = mat.copy()
     num = best_arr.shape[1]
@@ -234,14 +242,14 @@ def role_determinant(combo_list,type_list,trans_num):
         if i not in ind:
             best_arr[0,i]=0
             best_arr[1,i]=0
-    print(best_arr)
+    #print(best_arr)
     max_2 = max(best_arr[1])
     idxs, = np.where(best_arr[1]==max_2)
     same_trans = []
     if len(idxs)>1:
         for j in idxs:
             if np.array_equal(type_list,type_matrix[j]):
-                print('ПОЛНОЕ СОВПАДЕНИЕ')
+                #print('ПОЛНОЕ СОВПАДЕНИЕ')
                 #roles.update({str(trans_num):int(j)})
                 same_trans.append(j)
         if len(same_trans) >1:
@@ -253,13 +261,13 @@ def role_determinant(combo_list,type_list,trans_num):
 
         if not roles.get(str(trans_num),False):
             r = random.choice(idxs)
-            print('БОГ РАНДОМА')
+            #print('БОГ РАНДОМА')
             roles.update({str(trans_num): int(r)})
 
     if len(idxs)==1:
         roles.update({str(trans_num): int(idxs[0])})
 
-    print('Транзакция- ',trans_num,' : ',roles.get(str(trans_num)),' - Роль')
+    #print('Транзакция- ',trans_num,' : ',roles.get(str(trans_num)),' - Роль')
 
 
 def role_distributor(data,roles_dict):
@@ -698,12 +706,10 @@ def make_vector_Q(sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr
 
 
 
-def cut_query_from_log():
+def cut_query_from_log(path,path_result):
     data = pd.read_csv(path, sep="\t", header=None)
     data.columns = ["del1", "transaction", "query"]
     data.drop('del1', axis=1, inplace=True)
-    # data = data.reset_index()
-    # data.drop('transaction', axis=1, inplace=True)
     transaction_numbering(data)
     print(data)
     data['query'].replace('', np.nan, inplace=True)
@@ -719,14 +725,12 @@ def cut_query_from_log():
 
 
 if __name__ == '__main__':
-    #РАСКОМЕНТИТЬ
-    #cut_query_from_log()
+    # ПРОВЕРИТЬ КАКОГО ХЕРА FOR в большинстве экстракторов захватывает все действо. Возможны избыточные циклы.
+    cut_query_from_log(source_path1,path_result1)
+    data = pd.read_csv(path_result1, sep=",", header=None)
+    transaction_iterator(data,path_trainXvector1)
 
-    #ПРОВЕРИТЬ КАКОГО ХЕРА FOR в большинстве экстракторов захватывает все действо. Возможны избыточные циклы.
+    cut_query_from_log(source_path2, path_result2)
+    data2 = pd.read_csv(path_result2, sep=",", header=None)
+    transaction_iterator(data2, path_testXvector1)
 
-    #####################
-    #
-    data = pd.read_csv(path_result, sep=",", header=None)
-    data.columns = ["transaction",'role', "query"]
-    print(data)
-    transaction_iterator(data)
