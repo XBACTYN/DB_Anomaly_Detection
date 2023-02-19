@@ -20,6 +20,7 @@ path_result2 = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\cutted_queries
 
 path_trainXvector1 ='C:\\Users\\user\\Desktop\\query_logs\\processing\\train_vectors1.csv'
 path_testXvector1 ='C:\\Users\\user\\Desktop\\query_logs\\processing\\test_vectors1.csv'
+path_testXvectorAnomal1 ='C:\\Users\\user\\Desktop\\query_logs\\processing\\test_vectors_anomaly1.csv'
 
 transaction_matrix = np.array([
                       [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0],
@@ -160,13 +161,14 @@ def transaction_numbering(data):
                 else:
                     data.drop([index])
         rows['transaction'] = num
+        #разобраться почему работает присвоение через rows
         #print(rows['transaction'])
 
 def transaction_iterator(data,path_result):
     data.columns = ["transaction", 'role', "query"]
     # Создавать не матрицу а вектор.
     # Сравнение - отнимаем массивы. Считаем нули. И относим где максимально нулей. Коллизии попробовать решить по действию select,insert
-    count = data['transaction'].max()
+    count = int(data['transaction'].max())+1
     print(count)
     ############ НА ВРЕМЯ
     #count=11
@@ -174,7 +176,7 @@ def transaction_iterator(data,path_result):
     type_list =[]
     new_data_transactions = []
     new_data_vectors = []
-    for i in range (8,count):
+    for i in range (1,count):
         trans_num= i
         print('Транзакция ',trans_num)
         combo_list.clear()
@@ -723,14 +725,38 @@ def cut_query_from_log(path,path_result):
     print(data)
     data.to_csv(path_result, index=False, header=False)
 
+def make_anomalies(path,path_result,percent):
+    data = pd.read_csv(path,sep=',',header=None)
+    data.columns = ["transaction", 'role', "query"]
+    data.drop([0], inplace=True)
+    print(data)
+    count = (int(data['transaction'].max())*percent)//100
+    #count =9
+    print('Количество аномалий(идут первыми) :',count)
+    all_roles = [0,1,2,3,4,5,6,7,8,9,10]
+    for i in range(1,count+1):
+        r = data.loc[data['transaction']==str(i), 'role'].values[0]
+        c = all_roles.copy()
+        c.remove(int(r))
+        anomaly = random.choice(c)
+        data.loc[(data['transaction'] == str(i)), 'role'] = str(anomaly)
+
+
+    data.to_csv(path_result,index=False,header=False)
+
+
 
 if __name__ == '__main__':
     # ПРОВЕРИТЬ КАКОГО ХЕРА FOR в большинстве экстракторов захватывает все действо. Возможны избыточные циклы.
     cut_query_from_log(source_path1,path_result1)
     data = pd.read_csv(path_result1, sep=",", header=None)
     transaction_iterator(data,path_trainXvector1)
-
+    #
     cut_query_from_log(source_path2, path_result2)
     data2 = pd.read_csv(path_result2, sep=",", header=None)
     transaction_iterator(data2, path_testXvector1)
+
+    make_anomalies(path_testXvector1,path_testXvectorAnomal1,1)
+
+
 
