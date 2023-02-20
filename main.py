@@ -12,15 +12,15 @@ from nltk.tokenize import RegexpTokenizer
 
 MAX_COLUMNS = 30
 NUM_TABLES = 34
-source_path1 = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\raw_logs.txt'
-source_path2 = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\raw_logs2.txt'
+source_path1 = 'data\\preprocessing\\raw_logs.txt'
+source_path2 = 'data\\preprocessing\\raw_logs2.txt'
 
-path_result1 = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\cutted_queries.csv'
-path_result2 = 'C:\\Users\\user\\Desktop\\query_logs\\processing\\cutted_queries2.csv'
+path_result1 = 'data\\preprocessing\\cutted_queries.csv'
+path_result2 = 'data\\preprocessing\\cutted_queries2.csv'
 
-path_trainXvector1 ='C:\\Users\\user\\Desktop\\query_logs\\processing\\train_vectors1.csv'
-path_testXvector1 ='C:\\Users\\user\\Desktop\\query_logs\\processing\\test_vectors1.csv'
-path_testXvectorAnomal1 ='C:\\Users\\user\\Desktop\\query_logs\\processing\\test_vectors_anomaly1.csv'
+path_trainXvector1 ='data\\train\\train_vectors1.csv'
+path_testXvector1 ='data\\test\\test_vectors1.csv'
+path_testXvectorAnomal1 ='data\\test\\test_vectors_anomaly1.csv'
 
 transaction_matrix = np.array([
                       [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0],
@@ -169,14 +169,14 @@ def transaction_iterator(data,path_result):
     # Создавать не матрицу а вектор.
     # Сравнение - отнимаем массивы. Считаем нули. И относим где максимально нулей. Коллизии попробовать решить по действию select,insert
     count = int(data['transaction'].max())+1
-    print(count)
+    # print(count)
     ############ НА ВРЕМЯ
-    #count=11
+    # count=2
     combo_list = []
     type_list =[]
     new_data_transactions = []
     new_data_vectors = []
-    for i in range (1,count):
+    for i in range (1,count+1):
         trans_num= i
         print('Транзакция ',trans_num)
         combo_list.clear()
@@ -191,17 +191,17 @@ def transaction_iterator(data,path_result):
                 new_data_transactions.append(trans_num)
 
         role_determinant(combo_list,type_list,trans_num)
-    print(len(new_data_transactions))
-    print(len(new_data_vectors))
+    # print(len(new_data_transactions))
+    # print(len(new_data_vectors))
     roles_l = []
     for el in (new_data_transactions):
         roles_l.append(roles.get(str(el)))
-    print(roles_l)
-    print(roles)
-    print(new_data_transactions)
+    # print(roles_l)
+    # print(roles)
+    # print(new_data_transactions)
 
     df = pd.DataFrame({'Transaction': new_data_transactions,'Role': roles_l,'Query_Vector': new_data_vectors})
-    print(df)
+    # print(df)
     df.to_csv(path_result, index=False)
 
 
@@ -227,7 +227,7 @@ def role_determinant(combo_list,type_list,trans_num):
     for el in combo_list:
         m[tables.get(el)] = 1
     #Приоритет по первой строке. По максимуму второй берем по индексу элементы из первой,находим там максимум(ы).
-    # Если много максимумов, приоритет на полностью совпадающие type
+    #Если много максимумов, приоритет на полностью совпадающие type
 
     result_1 = transaction_matrix - m
     judge_array = (result_1 == 0).sum(1)
@@ -236,7 +236,7 @@ def role_determinant(combo_list,type_list,trans_num):
     judge_array_2 = (result_2>=0).sum(1)
     mat = np.array([judge_array_2,judge_array])
     max_1 = max(mat[0])
-    #print(max_1)
+    print(max_1)
     ind, = np.where(mat[0]==max_1)
     best_arr = mat.copy()
     num = best_arr.shape[1]
@@ -320,9 +320,10 @@ def PROJ_REL(query):
 
 def PROJ_ATTR(query):
     proj_attr = [0, [0], [0]]
+    #print(query)
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
-    #print(parsed.tokens)
+
     t = parsed.tokens[0].value
     attributes = []
     ilist = []
@@ -377,8 +378,9 @@ def PROJ_ATTR(query):
     for el in d.items():
         t_list.append(el[0])
 
-    table_string2 = []  ###
-    table_string2.append('0' * NUM_TABLES)  ###
+    # table_string2 = []  ###
+    # table_string2.append('0' * NUM_TABLES)  ###
+    table_string2=np.zeros(NUM_TABLES,int)
     table_vector3 = np.zeros(NUM_TABLES, int)  ###
     arr_string = []
     for tab in t_list:
@@ -386,21 +388,21 @@ def PROJ_ATTR(query):
         for el in ilist:
             if fields.get(str(el)) and tab == str(fields[str(el)][0]):
                 tab_idx = tables[tab]  ###
-                table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
-                                   table_string2[0][tab_idx + 1:]  ###
+                table_string2[tab_idx] += 1
+                #print('check ',len(table_string2))
                 idx = fields[str(el)][1]
                 arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
         arr_string[-1] = arr_string[-1][::-1]
         table_vector3[tables[tab]] = int(arr_string[-1], 2)
 
-    #print('table string', table_string2)
-    #print('vector3', table_vector3)
-    proj_attr[1] = [int(item) for item in table_string2[0]]  ###
+
+    #proj_attr[1] = [int(item) for item in table_string2[0]]  ### !!!!!!!!!!!!!!!!!!
+    proj_attr[1]=table_string2
+    #print(proj_attr[1])
     proj_attr[2] = table_vector3
     proj_attr[2] = list(proj_attr[2])
 
-    #print(proj_attr)
     return proj_attr,t_list
 
 
@@ -417,8 +419,9 @@ def SEL_ATTR(query):
         if (str(type(parsed.tokens[i])) == '<class \'sqlparse.sql.Where\'>'):
             idx = i
 
-    table_string2 = []  ###
-    table_string2.append('0' * NUM_TABLES)  ###
+    # table_string2 = []  ###
+    # table_string2.append('0' * NUM_TABLES)  ###
+    table_string2 = np.zeros(NUM_TABLES, int)
     table_vector3 = np.zeros(NUM_TABLES, int)  ###
 
     if idx != 0:
@@ -461,8 +464,9 @@ def SEL_ATTR(query):
                 for el in f_list:
                     if fields.get(str(el)) and tab == str(fields[str(el)][0]):
                         tab_idx = tables[tab]  ###
-                        table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
-                                           table_string2[0][tab_idx + 1:]  ###
+                        # table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
+                        #                    table_string2[0][tab_idx + 1:]  ###
+                        table_string2[tab_idx]+=1
                         idx = fields[str(el)][1]
                         arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
@@ -471,7 +475,8 @@ def SEL_ATTR(query):
 
             #print('table string', table_string2)
             #print('vector3', table_vector3)
-    sel_attr[1] = [int(item) for item in table_string2[0]]  ###
+    # sel_attr[1] = [int(item) for item in table_string2[0]]  ###
+    sel_attr[1]=table_string2
     sel_attr[2] = table_vector3
     sel_attr[2] = list(sel_attr[2])
 
@@ -494,9 +499,10 @@ def ORDER_ATTR(query):
         if (str(parsed.tokens[i].value) == "ORDER BY"):
             idx = i + 2
 
-    table_string2 = []  ###
-    table_string2.append('0' * NUM_TABLES)  ###
+    # table_string2 = []  ###
+    # table_string2.append('0' * NUM_TABLES)  ###
     table_vector3 = np.zeros(NUM_TABLES, int)  ###
+    table_string2 = np.zeros(NUM_TABLES, int)
 
     if idx != 0:
         # q = str(parsed.tokens[idx])
@@ -520,33 +526,30 @@ def ORDER_ATTR(query):
             for el in f_list:
                 t_list.append(fields[el][0])
 
-                # print(t_list)
-                c = Counter(t_list)
-                # print(c)
-                d = dict(sorted(c.items()))
-                # print(d)
-                t_list.clear()
-                for el in d.items():
-                    t_list.append(el[0])
+            c = Counter(t_list)
+            d = dict(sorted(c.items()))
+            t_list.clear()
+            for el in d.items():
+                t_list.append(el[0])
 
                 # t_list.sort()
                 #print(t_list)
-                idx = 0
-                arr_string = []
-                for tab in t_list:
-                    arr_string.append('0' * MAX_COLUMNS)
-                    for el in f_list:
-                        if fields.get(str(el)) and tab == str(fields[str(el)][0]):
-                            tab_idx = tables[tab]  ###
-                            table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
-                                               table_string2[0][tab_idx + 1:]  ###
-                            idx = fields[str(el)][1]
-                            arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
+            idx = 0
+            arr_string = []
+            for tab in t_list:
+                arr_string.append('0' * MAX_COLUMNS)
+                for el in f_list:
+                    if fields.get(str(el)) and tab == str(fields[str(el)][0]):
+                        tab_idx = tables[tab]  ###
+                        table_string2[tab_idx]+=1
+                        idx = fields[str(el)][1]
+                        arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
-                    arr_string[-1] = arr_string[-1][::-1]  ###
-                    table_vector3[tables[tab]] = int(arr_string[-1], 2)  ###
+                arr_string[-1] = arr_string[-1][::-1]  ###
+                table_vector3[tables[tab]] = int(arr_string[-1], 2)  ###
 
-    order_attr[1] = [int(item) for item in table_string2[0]]  ###
+    # order_attr[1] = [int(item) for item in table_string2[0]]  ###
+    order_attr[1]=table_string2
     order_attr[2] = table_vector3
     order_attr[2] = list(order_attr[2])
 
@@ -567,8 +570,9 @@ def GRPBY_ATTR(query):
         if (str(parsed.tokens[i].value) == "GROUP BY"):
             idx = i + 2
 
-    table_string2 = []  ###
-    table_string2.append('0' * NUM_TABLES)  ###
+    # table_string2 = []  ###
+    # table_string2.append('0' * NUM_TABLES)  ###
+    table_string2 = np.zeros(NUM_TABLES, int)
     table_vector3 = np.zeros(NUM_TABLES, int)  ###
 
     if idx != 0:
@@ -594,34 +598,32 @@ def GRPBY_ATTR(query):
                 t_list.append(fields[el][0])
 
                 # print(t_list)
-                c = Counter(t_list)
+            c = Counter(t_list)
                 # print(c)
-                d = dict(sorted(c.items()))
+            d = dict(sorted(c.items()))
                 # print(d)
-                t_list.clear()
-                for el in d.items():
-                    t_list.append(el[0])
+            t_list.clear()
+            for el in d.items():
+                t_list.append(el[0])
 
-                # t_list.sort()
-                #print(t_list)
-                # print(arr)
+            idx = 0
+            arr_string = []
+            for tab in t_list:
+                arr_string.append('0' * MAX_COLUMNS)
+                for el in f_list:
+                    if fields.get(str(el)) and tab == str(fields[str(el)][0]):
+                        tab_idx = tables[tab]  ###
+                            # table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
+                            #                    table_string2[0][tab_idx + 1:]  ###
+                        table_string2[tab_idx]+=1
+                        idx = fields[str(el)][1]
+                        arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
-                idx = 0
-                arr_string = []
-                for tab in t_list:
-                    arr_string.append('0' * MAX_COLUMNS)
-                    for el in f_list:
-                        if fields.get(str(el)) and tab == str(fields[str(el)][0]):
-                            tab_idx = tables[tab]  ###
-                            table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
-                                               table_string2[0][tab_idx + 1:]  ###
-                            idx = fields[str(el)][1]
-                            arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
+                arr_string[-1] = arr_string[-1][::-1]  ###
+                table_vector3[tables[tab]] = int(arr_string[-1], 2)  ###
 
-                    arr_string[-1] = arr_string[-1][::-1]  ###
-                    table_vector3[tables[tab]] = int(arr_string[-1], 2)  ###
-
-    grpby_attr[1] = [int(item) for item in table_string2[0]]  ###
+    # grpby_attr[1] = [int(item) for item in table_string2[0]]  ###
+    grpby_attr[1]=table_string2
     grpby_attr[2] = table_vector3
     grpby_attr[2] = list(grpby_attr[2])
 
@@ -681,7 +683,9 @@ def query_preprocessing(query):
     sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr,combo_list = feature_extractor(query)
     Q = make_vector_Q(sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr)
     #print(Q)
-    #print(len(Q))
+    #proj_attr_dec разное количество
+    if(len(Q)!=285):
+        print('HUI1231231131312312')
     return Q,combo_list
 
 
@@ -729,34 +733,46 @@ def make_anomalies(path,path_result,percent):
     data = pd.read_csv(path,sep=',',header=None)
     data.columns = ["transaction", 'role', "query"]
     data.drop([0], inplace=True)
-    print(data)
-    count = (int(data['transaction'].max())*percent)//100
+    print(data[-1:]['transaction'])
+    #count = (int(data['transaction'].max())*percent)//100
+    count = (int(data[-1:]['transaction'])*percent)//100
+    print(count)
     #count =9
     print('Количество аномалий(идут первыми) :',count)
     all_roles = [0,1,2,3,4,5,6,7,8,9,10]
+    empty = 0
     for i in range(1,count+1):
-        r = data.loc[data['transaction']==str(i), 'role'].values[0]
-        c = all_roles.copy()
-        c.remove(int(r))
-        anomaly = random.choice(c)
-        data.loc[(data['transaction'] == str(i)), 'role'] = str(anomaly)
-
+        try:
+            r = data.loc[data['transaction']==str(i), 'role'].values[0]
+            c = all_roles.copy()
+            c.remove(int(r))
+            anomaly = random.choice(c)
+            data.loc[(data['transaction'] == str(i)), 'role'] = str(anomaly)
+        except:
+            empty = empty+1
+    print('Количество аномалий(идут первыми) :', count-empty)
 
     data.to_csv(path_result,index=False,header=False)
+    f = open('data\\test\\anomaly_count.txt','w')
+    f.write(str(percent))
+    f.write("\n")
+    f.write(str(count-empty))
+    f.close()
 
 
 
 if __name__ == '__main__':
     # ПРОВЕРИТЬ КАКОГО ХЕРА FOR в большинстве экстракторов захватывает все действо. Возможны избыточные циклы.
-    cut_query_from_log(source_path1,path_result1)
-    data = pd.read_csv(path_result1, sep=",", header=None)
-    transaction_iterator(data,path_trainXvector1)
-    #
-    cut_query_from_log(source_path2, path_result2)
-    data2 = pd.read_csv(path_result2, sep=",", header=None)
-    transaction_iterator(data2, path_testXvector1)
+    # cut_query_from_log(source_path1,path_result1)
+    # data = pd.read_csv(path_result1, sep=",", header=None)
+    # transaction_iterator(data,path_trainXvector1)
+    # # #
+    # cut_query_from_log(source_path2, path_result2)
+    # data2 = pd.read_csv(path_result2, sep=",", header=None)
+    # transaction_iterator(data2, path_testXvector1)
 
-    make_anomalies(path_testXvector1,path_testXvectorAnomal1,1)
+    make_anomalies(path_testXvector1,path_testXvectorAnomal1,25)
+
 
 
 
