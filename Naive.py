@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.decomposition import PCA
 X_train_path = 'data\\train\\train_vectors1.csv'
 X_test_path = 'data\\test\\test_vectors_anomaly1.csv'
 Y_test_true_path = 'data\\test\\test_vectors1.csv'
@@ -28,36 +30,16 @@ def preprocessing_data(S):
     #print(res)
     return res
 
-def Naive(X_train,y_train,X_test,y_test_anomalies,y_test_true):
-    gnb = GaussianNB()
-    # y_pred = gnb.fit(X_train, y_train).predict(X_test)
-    y_pred = gnb.fit(X_train, y_train).predict(X_test)
-    total = X_test.shape[0]
-    #print(total)
-    #print((y_test_true!=y_pred))
-    #print(y_pred)
-    #print(y_train)
-    pred= list(y_pred)
-    y_true= list(y_test_true)
-    errors=0
-    for i, j in zip(pred, y_true):
-        if i != j:
-            errors += 1
-
-    #errors = (y_test_true != y_pred).sum(axis=0)
-    print('From total ',total,'mislabled ',errors)
-    #b1=(y_test_anomalies != y_pred).astype(int)
-
-    # anomalies = (y_test_anomalies != y_pred).sum(axis=0)
-    #anomalies = b1.sum(axis=0)
-    #print('anomalies ',anomalies)
-    return y_pred
 
 def RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test_true):
-    clf = RandomForestClassifier(n_estimators=300, random_state=0)
+    clf = RandomForestClassifier(n_estimators=1,max_depth=11)
+    #pca = PCA(n_components=20)
+    #XPCAreduced = pca.fit_transform(X_train)
+    #clf.fit(XPCAreduced, y_train)
     clf.fit(X_train, y_train)
-    RandomForestClassifier(...)
-    #print(clf.predict([[0, 0, 0, 0]]))
+
+    #XPCAtest = pca.fit_transform(X_train)
+
     y_predict = clf.predict(X_test)
     total=X_test.shape[0]
     pred = list(y_predict)
@@ -71,19 +53,14 @@ def RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test_true):
     for i,j in zip(pred,y_true):
         if i!=j:
             errors+=1
+
     for i, j in zip(pred, y_anom):
         if i != j:
             anomalies += 1
 
-    y = clf.predict(X_train)
-    marker=0
-    y_copy=list(y)
-    for i,j in zip(y_copy,y_true):
-        if i!=j:
-            marker+=1
+
     print('From total ', total, 'mislabled ', errors)
     print('From total ', total, 'anomal is ', anomalies)
-    print('From total ', total, 'marked ', marker)
     return y_predict
 def main():
     X_tr,y_train = unpack_data(X_train_path)
@@ -92,7 +69,7 @@ def main():
     X_train = preprocessing_data(X_tr)
     X_test = preprocessing_data(X_ts)
 
-    #y_pred = Naive(X_train,y_train,X_test,y_test,y_test_true)
+    #naive_y = Naive(X_train,y_train,X_test,y_test,y_test_true)
     f_pred = RandomForest(X_train,y_train,X_test,y_test,y_test_true)
 
 

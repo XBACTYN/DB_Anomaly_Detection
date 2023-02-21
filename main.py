@@ -171,7 +171,7 @@ def transaction_iterator(data,path_result):
     count = int(data['transaction'].max())+1
     # print(count)
     ############ НА ВРЕМЯ
-    # count=2
+    #count=2
     combo_list = []
     type_list =[]
     new_data_transactions = []
@@ -196,12 +196,12 @@ def transaction_iterator(data,path_result):
     roles_l = []
     for el in (new_data_transactions):
         roles_l.append(roles.get(str(el)))
-    # print(roles_l)
-    # print(roles)
-    # print(new_data_transactions)
+
+
 
     df = pd.DataFrame({'Transaction': new_data_transactions,'Role': roles_l,'Query_Vector': new_data_vectors})
-    # print(df)
+
+
     df.to_csv(path_result, index=False)
 
 
@@ -233,10 +233,11 @@ def role_determinant(combo_list,type_list,trans_num):
     judge_array = (result_1 == 0).sum(1)
 
     result_2 = type_matrix - type_list
-    judge_array_2 = (result_2>=0).sum(1)
+    # judge_array_2 = (result_2>=0).sum(1)
+    judge_array_2 = (result_2 == 0).sum(1) #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     mat = np.array([judge_array_2,judge_array])
     max_1 = max(mat[0])
-    print(max_1)
+    #print(max_1)
     ind, = np.where(mat[0]==max_1)
     best_arr = mat.copy()
     num = best_arr.shape[1]
@@ -288,37 +289,66 @@ def SQL_CMD(query):
 
 
 def PROJ_REL(query):
+    query = query.replace(" FORCE INDEX(PRIMARY)", "")
+    print(query)
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     proj_rel = [0, 0]
     arr_string = []
     t_list =[]
+    new_list=[]
     arr_string.append('0' * NUM_TABLES)
     parsed = sqlparse.parse(query)[0]
     t = parsed.tokens[0].value
     idx = 0
     for i in range(0, len(parsed.tokens)):
-        if (str(type(parsed.tokens[i].value)) == 'FROM'):
+        if (str(parsed.tokens[i].value) == 'FROM'):
             idx=i+2
 
     if idx!=0:
-        proj_rel[0] = len(list(IdentifierList(TokenList(parsed.tokens[idx])).get_identifiers()))
-        t_list = IdentifierList(TokenList(parsed.tokens[query_mode[t][1]])).get_identifiers()
+        #print('zahod')
+        a = parsed.tokens[idx]
+        b = TokenList([a])
+        c = IdentifierList(b)
+        d = c.get_identifiers()
+        e = list(d)
+        proj_rel[0]=len(e)
+        tokenizer = RegexpTokenizer(r'\w+')
+        S = re.compile(r'FROM([^"]*)WHERE')
+        t = S.findall(query)
+        tokens = tokenizer.tokenize(str(t))
+        for elem in tokens:
+            if tables.get(str(elem)):
+                t_list.append(elem)
+
+        # new_list = list(set(plus_list+t_list))
+
+
         for el in t_list:
         #print(str(el))
-            indx = tables.get(str(el))
+            el= str(el).split(' ')
+            indx = tables.get(str(el[0]).lower())
             if indx:
                 arr_string[-1] = arr_string[-1][:indx] + '1' + arr_string[-1][indx + 1:]
+    # else:
+    #     for el in plus_list:
+    #         el = str(el).split(' ')
+    #         indx = tables.get(str(el[0]).lower())
+    #         if indx:
+    #             arr_string[-1] = arr_string[-1][:indx] + '1' + arr_string[-1][indx + 1:]
 
+    #print(proj_rel[0])
     proj_rel[1] = arr_string[0]
     #print(proj_rel[1])
     proj_rel[1] = proj_rel[1][::-1]
     #print(proj_rel[1])
+    #print(proj_rel[1])
     proj_rel[1] = int(proj_rel[1], 2)
     #print(proj_rel)
-    return proj_rel,list(map(str,t_list))
+    return proj_rel,list(map(str,new_list))
 
 
 def PROJ_ATTR(query):
+    #print(query)
     proj_attr = [0, [0], [0]]
     #print(query)
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
@@ -402,11 +432,13 @@ def PROJ_ATTR(query):
     #print(proj_attr[1])
     proj_attr[2] = table_vector3
     proj_attr[2] = list(proj_attr[2])
-
+    #print(proj_attr[2])
     return proj_attr,t_list
 
 
 def SEL_ATTR(query):
+    #print('select attr')
+    #print(query)
     sel_attr = [0, [0], [0]]
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
@@ -681,21 +713,20 @@ def VALUE_CTR(query):
 
 def query_preprocessing(query):
     sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr,combo_list = feature_extractor(query)
-    Q = make_vector_Q(sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr)
+    # Q = np.hstack([sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr])
+    Q = np.hstack([sql_cmd, proj_rel_dec,proj_attr_dec, value_ctr])
     #print(Q)
     #proj_attr_dec разное количество
-    if(len(Q)!=285):
-        print('HUI1231231131312312')
     return Q,combo_list
 
 
 
 def feature_extractor(query):
     sql_cmd = np.hstack(SQL_CMD(query))
+    proj_attr, t_list2 = PROJ_ATTR(query)
+    proj_attr_dec = np.hstack(proj_attr)
     proj_rel,t_list1 = PROJ_REL(query)
     proj_rel_dec =np.hstack(proj_rel)
-    proj_attr,t_list2 = PROJ_ATTR(query)
-    proj_attr_dec = np.hstack(proj_attr)
     sel_attr,t_list3 = SEL_ATTR(query)
     sel_attr_dec = np.hstack(sel_attr)
     order_attr_dec = np.hstack(ORDER_ATTR(query))
@@ -705,10 +736,6 @@ def feature_extractor(query):
     combo_list = t_list1 + t_list2 + t_list3
 
     return sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr,combo_list
-
-
-def make_vector_Q(sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr):
-    return np.hstack([sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr])
 
 
 
@@ -763,13 +790,13 @@ def make_anomalies(path,path_result,percent):
 
 if __name__ == '__main__':
     # ПРОВЕРИТЬ КАКОГО ХЕРА FOR в большинстве экстракторов захватывает все действо. Возможны избыточные циклы.
-    # cut_query_from_log(source_path1,path_result1)
-    # data = pd.read_csv(path_result1, sep=",", header=None)
-    # transaction_iterator(data,path_trainXvector1)
+    #cut_query_from_log(source_path1,path_result1)
+    data = pd.read_csv(path_result1, sep=",", header=None)
+    transaction_iterator(data,path_trainXvector1)
     # # #
     # cut_query_from_log(source_path2, path_result2)
-    # data2 = pd.read_csv(path_result2, sep=",", header=None)
-    # transaction_iterator(data2, path_testXvector1)
+    data2 = pd.read_csv(path_result2, sep=",", header=None)
+    transaction_iterator(data2, path_testXvector1)
 
     make_anomalies(path_testXvector1,path_testXvectorAnomal1,25)
 
