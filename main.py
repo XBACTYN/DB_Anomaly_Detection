@@ -4,37 +4,40 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 import re
+import time
 import regex
+import json
 import sqlparse
+import swifter
 from sklearn.cluster import KMeans
 from sqlparse.sql import IdentifierList, TokenList, Parenthesis
 from nltk.tokenize import RegexpTokenizer
 
+
 MAX_COLUMNS = 30
 NUM_TABLES = 34
-source_path1 = 'data\\preprocessing\\raw_logs.txt'
-source_path2 = 'data\\preprocessing\\raw_logs2.txt'
+source_path1 = 'data\\preprocessing\\raw_logs3.txt'
+source_path2 = 'data\\preprocessing\\raw_logs4.txt'
 
-path_result1 = 'data\\preprocessing\\cutted_queries.csv'
-path_result2 = 'data\\preprocessing\\cutted_queries2.csv'
+path_result1 = 'data\\preprocessing\\cutted_queries3.csv'
+path_result2 = 'data\\preprocessing\\cutted_queries4.csv'
 
-path_trainXvector1 ='data\\train\\train_vectors1.csv'
-path_testXvector1 ='data\\test\\test_vectors1.csv'
-path_testXvectorAnomal1 ='data\\test\\test_vectors_anomaly1.csv'
+source_data_train = 'data\\preprocessing\\GENERATED_raw_logs_1.txt'
+source_data_test = 'data\\preprocessing\\GENERATED_raw_logs_test_1.txt'
+result_data_train = 'data\\train\\GENERATED_classic_vectors_train_1.json'
+result_data_test = 'data\\test\\GENERATED_classic_vectors_test_1.json'
+result_short_data_train = 'data\\train\\GENERATED_short_vectors_train.json'
+result_short_data_test = 'data\\test\\GENERATED_short_vectors_test.json'
+lead_time = 'data\\making_vectors.json'
 
-transaction_matrix = np.array([
-                      [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0],
-                      [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,1,1,0,0,0,0,0],
-                      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0],
-                      [0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,0,0,0,1,0,0,0,0,0,0,0,0,1,1,0],
-                      [0,1,0,0,0,0,1,1,0,0,0,1,1,1,0,0,0,1,1,1,1,0,1,0,0,0,0,0,0,0,0,0,0,1],
-                      [0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1,1,0,1,0,0,0],
-                      [1,0,1,0,1,1,1,0,1,1,1,0,0,0,1,0,1,0,1,0,0,0,1,0,0,0,1,1,1,1,1,0,0,0],
-                      [0,0,1,1,0,1,0,0,1,1,1,0,0,0,1,1,1,0,0,0,0,0,1,0,1,0,1,1,1,0,1,0,0,0],
-                      [0,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,1,0,1,0,0,1,0,0,0],
-                      [0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,1,1,0,1,0,0,0],
-                      [1,1,0,0,0,0,1,0,1,0,1,1,1,1,0,0,0,0,0,1,1,0,1,0,0,0,1,0,0,0,0,1,1,0]])
-type_matrix = np.array([[1,0,0,0],[1,0,0,0],[1,2,3,4],[1,0,0,0],[1,0,0,0],[1,0,0,0],[1,2,0,0],[1,2,3,4],[1,0,0,0],[1,0,3,0],[1,0,3,0]])
+path_trainXvector1 = 'data\\train\\train_vectors31.csv'
+path_testXvector1 = 'data\\test\\test_vectors41.csv'
+path_testXvectorAnomal1 = 'data\\test\\test_vectors_anomaly42.csv'
+
+
+type_matrix = np.array(
+    [[1, 0, 0, 0], [1, 0, 0, 0], [1, 2, 3, 4], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0], [1, 2, 0, 0], [1, 2, 3, 4],
+     [1, 0, 0, 0], [1, 0, 3, 0], [1, 0, 3, 0]])
 tables = {'account_permission': 0, 'address': 1, 'broker': 2, 'cash_transaction': 3, 'charge': 4, 'commission_rate': 5,
           'company': 6, 'company_competitor': 7, 'customer': 8,
           'customer_account': 9, 'customer_taxrate': 10, 'daily_market': 11, 'exchange': 12, 'financial': 13,
@@ -47,8 +50,7 @@ tables = {'account_permission': 0, 'address': 1, 'broker': 2, 'cash_transaction'
 # [0]- тип запроса [1] - индекс листа с таблицами [2] - индекс листа с полями
 query_mode = {'SELECT': [1, 6, 2], 'INSERT': [2, 4, 4], 'UPDATE': [3, 2, 6], 'DELETE': [4, 4]}
 tabu_list = ['SELECT LAST_INSERT_ID()', 'SET TRANSACTION ISOLATION LEVEL READ COMMITTED',
-             'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ', 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE',
-             'rollback']
+             'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ', 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']
 roles = {}
 
 fields = {'ap_ca_id': ['account_permission', 0], 'ap_acl': ['account_permission', 1],
@@ -134,149 +136,186 @@ fields = {'ap_ca_id': ['account_permission', 0], 'ap_acl': ['account_permission'
           'wi_wl_id': ['watch_item', 0], 'wi_s_symb': ['watch_item', 1], 'wl_id': ['watch_list', 0],
           'wl_c_id': ['watch_item', 1],
           'zc_code': ['zip_code', 0], 'zc_town': ['zip_code', 1], 'zc_div': ['zip_code', 2]}
+# 1BV - 0, 2CP-1,2 , 3MF - 3, 4MW -4,5SD-5, 6TL -678 , 7TO -9,10,11,12 ,8TR - 13,14,15,16,17,18 , 9TS - 19, 10TU - 20,21,22 , 11DM - 23 ,12TC - 24
+frames = [['broker', 'trade_request'],
+          ['customer', 'customer_account', 'holding summary', 'last_trade'], ['status_type', 'trade_history', 'trade'],
+          ['last_trade', 'trade', 'trade_history', 'trade_request'],
+          ['company', 'daily_market', 'holding_summary', 'industry', 'last_trade', 'security', 'watch_item',
+           'watch_list'],
+          ['address', 'company', 'company_competitor', 'daily_market', 'exchange', 'financial', 'industry',
+           'last_trade', 'news_item', 'news_xref', 'security', 'zip_code'],
+          ['cash_transaction', 'settlement', 'trade', 'trade_history', 'trade_type'],
+          ['cash_transaction', 'settlement', 'trade', 'trade_history'], ['holding_history', 'trade'],
+          ['broker', 'customer', 'customer_account'], ['account_permission'],
+          ['charge', 'comission_rate', 'company', 'customer_account', 'customer_taxrate', 'holding', 'holding_summary',
+           'last_trade', 'security', 'taxrate', 'trade_type'], ['trade', 'trade_history', 'trade_request'],
+          ['holding_summary', 'trade', 'trade_type'],
+          ['customer_account', 'holding', 'holding_summary', 'holding_history'],
+          ['customer_taxrate', 'taxrate', 'trade'], ['comission_rate', 'customer', 'security'],
+          ['broker', 'trade', 'trade_history'], ['cash_transaction', 'customer_account', 'settlement'],
+          ['broker', 'customer', 'exchange', 'security', 'status_type', 'trade', 'trade_type'],
+          ['cash_transaction', 'settlement', 'trade', 'trade_history', 'trade_type'],
+          ['cash_transaction', 'settlement', 'trade', 'trade_history'],
+          ['cash_transaction', 'security', 'settlement', 'trade', 'trade_history', 'trade_type'],
+          ['account_permission', 'address', 'company', 'customer', 'customer_taxrate', 'daily_market', 'exchange',
+           'financial', 'security', 'news_item', 'news_xref', 'taxrate', 'watch_item', 'watch_list'],
+          ['trade', 'trade_history', 'trade_request']]
+tpce_roles = {'0': 1, '1': 2, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 6, '8': 6, '9': 7, '10': 7, '11': 7, '12': 7,
+              '13': 8, '14': 8, '15': 8, '16': 8, '17': 8, '18': 8, '19': 9, '20': 10, '21': 10, '22': 10, '23': 11,
+              '24': 12}
 
-
-# Возможно один элемент это матрица. где каждая строка этом массив использованных таблиц для селект,инсерт, делит.
-
-# РАСКОМЕНТИТЬ В ИТЕРАТОРЕ FOR, ЧТОБЫ ПО ВСЕМ ПЕРЕБИРАЛ
-
-# Заметка про МЕТОД1. Там у нас есть еще одна таблица y test с правильными значениями.
-# И после классификации получившийся y_test сравнивается с ней.
-
-# ЗАМЕТКА.  ВСЕ процедуры с векторами надо переделать, чтобы второй массив включал в себя все таблицы, а не только использованные.
 
 def transaction_numbering(data):
     num = 0
-    last = data.last_valid_index()
-
+    print('drop waste')
+    print(data.last_valid_index())
     for index, rows in data.iterrows():
+        print(index)
+        if data.loc[index]['query'] == 'rollback':
+            data.loc[index]["query"] = 'commit'
         if data.loc[index]['query'] in tabu_list:
-            data.drop([index])
-
+            data.drop([index], inplace=True)
+    print('numbering')
+    # count = data.shape[0]
+    # print('count',count)
+    # data.reindex(range(count), method='ffill')
+    last = data.last_valid_index()
+    print("last",last)
     for index, rows in data.iterrows():
-        if(index!=last):
-            if (data.loc[index]['query'] == 'commit'):
-                if(data.loc[index+1]['query'] != 'commit'):
-                    num = num + 1
-                else:
-                    data.drop([index])
-        rows['transaction'] = num
-        #разобраться почему работает присвоение через rows
-        #print(rows['transaction'])
+        if index != last:
+            print(index)
+            # print(rows)
+            if data.loc[index]['query'] == 'commit':
+                #if data.loc[int(index) + 1]['query'] != 'commit':
+                num = num + 1
+                    #print(index)
+                #else:
+                    #data.drop([index], inplace=True)
+                    #continue
+        # rows['transaction'] = num
+        data.loc[index]['transaction'] = num
+    print("numbering ends")
 
-def transaction_iterator(data,path_result):
+
+def transaction_iterator(data, path_result):
     data.columns = ["transaction", 'role', "query"]
-    # Создавать не матрицу а вектор.
-    # Сравнение - отнимаем массивы. Считаем нули. И относим где максимально нулей. Коллизии попробовать решить по действию select,insert
-    count = int(data['transaction'].max())+1
-    # print(count)
-    ############ НА ВРЕМЯ
-    #count=2
+    count = int(data['transaction'].max()) #+ 1
+    count = 10000
     combo_list = []
-    type_list =[]
+    type_list = []
     new_data_transactions = []
     new_data_vectors = []
-    for i in range (1,count+1):
-        trans_num= i
-        print('Транзакция ',trans_num)
+    for i in range(1, count + 1):
+        trans_num = i
+        # print('Транзакция ',trans_num)
         combo_list.clear()
         type_list.clear()
-        queries =data.loc[data['transaction']==i]
-        for index,rows in queries.iterrows():
+        queries = data.loc[data['transaction'] == i]
+        for index, rows in queries.iterrows():
             if rows['query'] != "commit":
-                vector,t_list = query_preprocessing(rows['query'])
+                #print(rows['query'])
+                vector, t_list = classic_vector_extractor(rows['query'])
                 combo_list = combo_list + t_list
                 type_list.append(vector[0])
                 new_data_vectors.append(vector)
                 new_data_transactions.append(trans_num)
 
-        role_determinant(combo_list,type_list,trans_num)
-    # print(len(new_data_transactions))
-    # print(len(new_data_vectors))
+        role_determinant(combo_list, type_list, trans_num)
+    #roles_file = open('data\\preprocessing\\roles.txt')
+    #json.dump(roles,roles_file,ensure_ascii=False)
     roles_l = []
     for el in (new_data_transactions):
         roles_l.append(roles.get(str(el)))
-
-
-
+    #print(roles_l)
+    c = Counter(roles_l)
+    d = dict(sorted(c.items()))
+    pr_list =[]
+    for el in d.items():
+        pr_list.append(el[0])
+    print(pr_list)
     df = pd.DataFrame({'Transaction': new_data_transactions,'Role': roles_l,'Query_Vector': new_data_vectors})
+    df.to_csv(path_result,sep='\t', index=False)
 
 
-    df.to_csv(path_result, index=False)
-
-
-def role_determinant(combo_list,type_list,trans_num):
+def role_determinant(combo_list, type_list, trans_num):
     c = Counter(combo_list)
     d = dict(sorted(c.items()))
     combo_list.clear()
     for el in d.items():
         combo_list.append(el[0])
-    #print(combo_list)
+    combo_list.sort()
     t = Counter(type_list)
     z = dict(sorted(t.items()))
     type_list.clear()
-    for i in range(1,5):
-        if z.get(i,0) ==0:
+    for i in range(1, 5):
+        if z.get(i, 0) == 0:
             type_list.append(0)
-        else :
+        else:
             type_list.append(i)
+    #print('combo list',combo_list)
+    max = 0
+    prefer_role =0
+    for j in range(0,len(frames)):
+        #print(frames[j],' number ',j)
+        count = len(list(set(combo_list)&set(frames[j])))
+        #print(count)
+        if count>max:
+            max = count
+            prefer_role=tpce_roles.get(str(j))
+        # if combo_list== frames[j]:
+        #     roles.update({str(trans_num): tpce_roles.get(str(j))})
+        #     print('SUCCESS',trans_num)
+        # else:
+        #     print('ERROR transaction',trans_num)
+    #print('prefer role ',prefer_role)
+    roles.update({str(trans_num): tpce_roles.get(str(prefer_role))})
+    # m = np.zeros(34, dtype=int)
+    # for el in combo_list:
+    #     m[tables.get(el)] = 1
+    # # Приоритет по первой строке. По максимуму второй берем по индексу элементы из первой,находим там максимум(ы).
+    # # Если много максимумов, приоритет на полностью совпадающие type
+    #
+    # result_1 = transaction_matrix - m
+    # judge_array = (result_1 == 0).sum(1)
+    #
+    # result_2 = type_matrix - type_list
+    # # judge_array_2 = (result_2>=0).sum(1)
+    # judge_array_2 = (result_2 == 0).sum(1)
+    # mat = np.array([judge_array_2, judge_array])
+    # max_1 = max(mat[0])
+    # ind, = np.where(mat[0] == max_1)
+    # best_arr = mat.copy()
+    # num = best_arr.shape[1]
+    # for i in range(0, num):
+    #     if i not in ind:
+    #         best_arr[0, i] = 0
+    #         best_arr[1, i] = 0
+    # max_2 = max(best_arr[1])
+    # idxs, = np.where(best_arr[1] == max_2)
+    # same_trans = []
+    # if len(idxs) > 1:
+    #     for j in idxs:
+    #         if np.array_equal(type_list, type_matrix[j]):
+    #             same_trans.append(j)
+    #     if len(same_trans) > 1:
+    #         r = random.choice(same_trans)
+    #         roles.update({str(trans_num): int(r)})
+    #
+    #     if len(same_trans) == 1:
+    #         roles.update({str(trans_num): int(same_trans[0])})
+    #
+    #     if not roles.get(str(trans_num), False):
+    #         r = random.choice(idxs)
+    #         roles.update({str(trans_num): int(r)})
+    #
+    # if len(idxs) == 1:
+    #     roles.update({str(trans_num): int(idxs[0])})
 
-    #print('types\n', type_list)
 
-    m = np.zeros(34, dtype=int)
-    for el in combo_list:
-        m[tables.get(el)] = 1
-    #Приоритет по первой строке. По максимуму второй берем по индексу элементы из первой,находим там максимум(ы).
-    #Если много максимумов, приоритет на полностью совпадающие type
+# def role_distributor(data, roles_dict):
+#     for index, rows in data.iterrows():
+#         rows['role'] = roles_dict.get(str(rows['transaction']))
 
-    result_1 = transaction_matrix - m
-    judge_array = (result_1 == 0).sum(1)
-
-    result_2 = type_matrix - type_list
-    # judge_array_2 = (result_2>=0).sum(1)
-    judge_array_2 = (result_2 == 0).sum(1) #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    mat = np.array([judge_array_2,judge_array])
-    max_1 = max(mat[0])
-    #print(max_1)
-    ind, = np.where(mat[0]==max_1)
-    best_arr = mat.copy()
-    num = best_arr.shape[1]
-    for i in range(0,num):
-        if i not in ind:
-            best_arr[0,i]=0
-            best_arr[1,i]=0
-    #print(best_arr)
-    max_2 = max(best_arr[1])
-    idxs, = np.where(best_arr[1]==max_2)
-    same_trans = []
-    if len(idxs)>1:
-        for j in idxs:
-            if np.array_equal(type_list,type_matrix[j]):
-                #print('ПОЛНОЕ СОВПАДЕНИЕ')
-                #roles.update({str(trans_num):int(j)})
-                same_trans.append(j)
-        if len(same_trans) >1:
-            r = random.choice(same_trans)
-            roles.update({str(trans_num):int(r)})
-
-        if len(same_trans)==1 :
-            roles.update({str(trans_num): int(same_trans[0])})
-
-        if not roles.get(str(trans_num),False):
-            r = random.choice(idxs)
-            #print('БОГ РАНДОМА')
-            roles.update({str(trans_num): int(r)})
-
-    if len(idxs)==1:
-        roles.update({str(trans_num): int(idxs[0])})
-
-    #print('Транзакция- ',trans_num,' : ',roles.get(str(trans_num)),' - Роль')
-
-
-def role_distributor(data,roles_dict):
-
-    for index,rows in data.iterrows():
-        rows['role']= roles_dict.get(str(rows['transaction']))
 
 def SQL_CMD(query):
     sql_cmd = [0, 0]
@@ -284,34 +323,32 @@ def SQL_CMD(query):
     type = parsed.tokens[0].value
     sql_cmd[0] = query_mode[str(type)][0]
     sql_cmd[1] = len(query)
-    #print(sql_cmd)
     return sql_cmd
 
 
 def PROJ_REL(query):
     query = query.replace(" FORCE INDEX(PRIMARY)", "")
-    print(query)
+    # print(query)
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     proj_rel = [0, 0]
     arr_string = []
-    t_list =[]
-    new_list=[]
+    t_list = []
+    new_list = []
     arr_string.append('0' * NUM_TABLES)
     parsed = sqlparse.parse(query)[0]
     t = parsed.tokens[0].value
     idx = 0
     for i in range(0, len(parsed.tokens)):
         if (str(parsed.tokens[i].value) == 'FROM'):
-            idx=i+2
+            idx = i + 2
 
-    if idx!=0:
-        #print('zahod')
+    if idx != 0:
         a = parsed.tokens[idx]
         b = TokenList([a])
         c = IdentifierList(b)
         d = c.get_identifiers()
         e = list(d)
-        proj_rel[0]=len(e)
+        proj_rel[0] = len(e)
         tokenizer = RegexpTokenizer(r'\w+')
         S = re.compile(r'FROM([^"]*)WHERE')
         t = S.findall(query)
@@ -320,37 +357,28 @@ def PROJ_REL(query):
             if tables.get(str(elem)):
                 t_list.append(elem)
 
-        # new_list = list(set(plus_list+t_list))
-
-
         for el in t_list:
-        #print(str(el))
-            el= str(el).split(' ')
+            el = str(el).split(' ')
             indx = tables.get(str(el[0]).lower())
             if indx:
                 arr_string[-1] = arr_string[-1][:indx] + '1' + arr_string[-1][indx + 1:]
-    # else:
-    #     for el in plus_list:
-    #         el = str(el).split(' ')
-    #         indx = tables.get(str(el[0]).lower())
-    #         if indx:
-    #             arr_string[-1] = arr_string[-1][:indx] + '1' + arr_string[-1][indx + 1:]
 
-    #print(proj_rel[0])
-    proj_rel[1] = arr_string[0]
-    #print(proj_rel[1])
-    proj_rel[1] = proj_rel[1][::-1]
-    #print(proj_rel[1])
-    #print(proj_rel[1])
-    proj_rel[1] = int(proj_rel[1], 2)
+    #print(arr_string)
+    arr_string[-1] = arr_string[-1][::-1]
+    proj_rel[1] =[int(i) for i in arr_string[0]]
     #print(proj_rel)
-    return proj_rel,list(map(str,new_list))
+    #proj_rel[1] = arr_string[0]
+    #proj_rel[1] = proj_rel[1][::-1]
+
+    #proj_rel[1] = list(proj_rel[1])
+    #print(proj_rel)
+    #proj_rel[1] = int(proj_rel[1], 2)#####################################################################################
+    #print('proj rel', t_list)
+    return proj_rel, t_list #list(map(str, new_list))
 
 
 def PROJ_ATTR(query):
-    #print(query)
     proj_attr = [0, [0], [0]]
-    #print(query)
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
 
@@ -358,40 +386,36 @@ def PROJ_ATTR(query):
     attributes = []
     ilist = []
     if t == 'INSERT':
-        res = re.findall(r'\((.*?)\)',str(parsed.tokens[query_mode[t][2]]))
-        #print(str(res))
+        res = re.findall(r'\((.*?)\)', str(parsed.tokens[query_mode[t][2]]))
         ilist = str(res).split(',')
 
-        ##
-        #ilist = list(ilist.get_identifiers())
-        ##
     else:
-        if t =='DELETE':
+        if t == 'DELETE':
             table_string2 = []
             t_list = []
             table_string2.append('0' * NUM_TABLES)
             proj_attr[1] = [int(item) for item in table_string2[0]]
             table_vector3 = np.zeros(NUM_TABLES, int)  ###
             proj_attr[2] = list(table_vector3)
-            return proj_attr,t_list
+            return proj_attr, t_list
+        if t == 'SELECT':
+            tokenizer = RegexpTokenizer(r'\w+')
+            S = re.compile(r'SELECT([^"]*)FROM')
+            t = S.findall(query)
+            ilist = tokenizer.tokenize(str(t))
         else:
             attributes = parsed.tokens[query_mode[t][2]]
             ilist = list(IdentifierList(TokenList(attributes)).get_identifiers())
 
     count_list = []
-    # for el in ilist.get_identifiers():
     copy_ilist = ilist.copy()
     new_list = []
     for el in copy_ilist:
-        # if not fields.get(str(el)):
         tokenizer = RegexpTokenizer(r'\w+')
-        #print('Обработка', str(el))
         tokens = tokenizer.tokenize(str(el))
-        #print('токены', tokens)
         for elem in tokens:
             if fields.get(str(elem)):
                 new_list.append(elem)
-        # new_list.remove(el)
     d = Counter(new_list)
     ilist.clear()
     for el in d.items():
@@ -399,7 +423,6 @@ def PROJ_ATTR(query):
 
     for el in ilist:
         count_list.append(fields[str(el)][0])
-    # print('ilist', ilist)
     proj_attr[0] = len(ilist)
     c = Counter(count_list)
     d = dict(sorted(c.items()))
@@ -408,9 +431,7 @@ def PROJ_ATTR(query):
     for el in d.items():
         t_list.append(el[0])
 
-    # table_string2 = []  ###
-    # table_string2.append('0' * NUM_TABLES)  ###
-    table_string2=np.zeros(NUM_TABLES,int)
+    table_string2 = np.zeros(NUM_TABLES, int)
     table_vector3 = np.zeros(NUM_TABLES, int)  ###
     arr_string = []
     for tab in t_list:
@@ -419,30 +440,23 @@ def PROJ_ATTR(query):
             if fields.get(str(el)) and tab == str(fields[str(el)][0]):
                 tab_idx = tables[tab]  ###
                 table_string2[tab_idx] += 1
-                #print('check ',len(table_string2))
                 idx = fields[str(el)][1]
                 arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
         arr_string[-1] = arr_string[-1][::-1]
         table_vector3[tables[tab]] = int(arr_string[-1], 2)
 
-
-    #proj_attr[1] = [int(item) for item in table_string2[0]]  ### !!!!!!!!!!!!!!!!!!
-    proj_attr[1]=table_string2
-    #print(proj_attr[1])
+    proj_attr[1] = table_string2
     proj_attr[2] = table_vector3
     proj_attr[2] = list(proj_attr[2])
-    #print(proj_attr[2])
-    return proj_attr,t_list
+    #print('proj attr',t_list)
+    return proj_attr, t_list
 
 
 def SEL_ATTR(query):
-    #print('select attr')
-    #print(query)
     sel_attr = [0, [0], [0]]
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
-    #print(parsed.tokens)
     idx = 0
     f_list = []
     t_list = []
@@ -451,23 +465,17 @@ def SEL_ATTR(query):
         if (str(type(parsed.tokens[i])) == '<class \'sqlparse.sql.Where\'>'):
             idx = i
 
-    # table_string2 = []  ###
-    # table_string2.append('0' * NUM_TABLES)  ###
     table_string2 = np.zeros(NUM_TABLES, int)
     table_vector3 = np.zeros(NUM_TABLES, int)  ###
 
     if idx != 0:
-        # q = str(parsed.tokens[idx])
-        # print(q)
         tokenizer = RegexpTokenizer(r'\w+')
         tokens = tokenizer.tokenize(str(parsed.tokens[idx]))
-        # print('токены', tokens)
         for elem in tokens:
             if fields.get(str(elem)):
                 f_list.append(elem)
 
         if len(f_list) > 0:
-            # print(f_list)
             c = Counter(f_list)
             f_list.clear()
             for el in c.items():
@@ -476,8 +484,6 @@ def SEL_ATTR(query):
             sel_attr[0] = len(f_list)
             for el in f_list:
                 t_list.append(fields[el][0])
-
-            # print(t_list)
             c = Counter(t_list)
             d = dict(sorted(c.items()))
             # print(d)
@@ -486,67 +492,48 @@ def SEL_ATTR(query):
                 t_list.append(el[0])
                 arr.append(el[1])
 
-            #print(t_list)
-
             idx = 0
             arr_string = []
-            #print(f_list)
             for tab in t_list:
                 arr_string.append('0' * MAX_COLUMNS)
                 for el in f_list:
                     if fields.get(str(el)) and tab == str(fields[str(el)][0]):
                         tab_idx = tables[tab]  ###
-                        # table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
-                        #                    table_string2[0][tab_idx + 1:]  ###
-                        table_string2[tab_idx]+=1
+                        table_string2[tab_idx] += 1
                         idx = fields[str(el)][1]
                         arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
                 arr_string[-1] = arr_string[-1][::-1]  ###
                 table_vector3[tables[tab]] = int(arr_string[-1], 2)  ###
 
-            #print('table string', table_string2)
-            #print('vector3', table_vector3)
-    # sel_attr[1] = [int(item) for item in table_string2[0]]  ###
-    sel_attr[1]=table_string2
+    sel_attr[1] = table_string2
     sel_attr[2] = table_vector3
     sel_attr[2] = list(sel_attr[2])
-
-    #print(sel_attr)
-
-    return sel_attr,t_list
+    #print('select attr',t_list)
+    return sel_attr, t_list
 
 
-# НЕ РАБОТАЕТ С ПЕРЕНАЗНАЧЕННЫМИ ПОЛЯМИ
 def ORDER_ATTR(query):
     order_attr = [0, [0], [0]]
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
-    #print(parsed.tokens)
     idx = 0
     f_list = []
     t_list = []
     for i in range(0, len(parsed.tokens)):
-        # print(i,parsed.tokens[i].value)
         if (str(parsed.tokens[i].value) == "ORDER BY"):
             idx = i + 2
 
-    # table_string2 = []  ###
-    # table_string2.append('0' * NUM_TABLES)  ###
     table_vector3 = np.zeros(NUM_TABLES, int)  ###
     table_string2 = np.zeros(NUM_TABLES, int)
 
     if idx != 0:
-        # q = str(parsed.tokens[idx])
-        # print(q)
         tokenizer = RegexpTokenizer(r'\w+')
         tokens = tokenizer.tokenize(str(parsed.tokens[idx]))
-        #print('токены', tokens)
         for elem in tokens:
             if fields.get(str(elem)):
                 f_list.append(elem)
 
-        #print(f_list)
         if len(f_list) > 0:
             # print(f_list)
             c = Counter(f_list)
@@ -564,8 +551,6 @@ def ORDER_ATTR(query):
             for el in d.items():
                 t_list.append(el[0])
 
-                # t_list.sort()
-                #print(t_list)
             idx = 0
             arr_string = []
             for tab in t_list:
@@ -573,19 +558,17 @@ def ORDER_ATTR(query):
                 for el in f_list:
                     if fields.get(str(el)) and tab == str(fields[str(el)][0]):
                         tab_idx = tables[tab]  ###
-                        table_string2[tab_idx]+=1
+                        table_string2[tab_idx] += 1
                         idx = fields[str(el)][1]
                         arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
                 arr_string[-1] = arr_string[-1][::-1]  ###
                 table_vector3[tables[tab]] = int(arr_string[-1], 2)  ###
 
-    # order_attr[1] = [int(item) for item in table_string2[0]]  ###
-    order_attr[1]=table_string2
+    order_attr[1] = table_string2
     order_attr[2] = table_vector3
     order_attr[2] = list(order_attr[2])
-
-    #print(order_attr)
+    #print('order attr',t_list)
     return order_attr
 
 
@@ -593,31 +576,23 @@ def GRPBY_ATTR(query):
     grpby_attr = [0, [0], [0]]
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
-    #print(parsed.tokens)
     idx = 0
     f_list = []
     t_list = []
     for i in range(0, len(parsed.tokens)):
-        # print(i,parsed.tokens[i].value)
         if (str(parsed.tokens[i].value) == "GROUP BY"):
             idx = i + 2
 
-    # table_string2 = []  ###
-    # table_string2.append('0' * NUM_TABLES)  ###
     table_string2 = np.zeros(NUM_TABLES, int)
     table_vector3 = np.zeros(NUM_TABLES, int)  ###
 
     if idx != 0:
-        # q = str(parsed.tokens[idx])
-        # print(q)
         tokenizer = RegexpTokenizer(r'\w+')
         tokens = tokenizer.tokenize(str(parsed.tokens[idx]))
-        #print('токены', tokens)
         for elem in tokens:
             if fields.get(str(elem)):
                 f_list.append(elem)
 
-        #print(f_list)
         if len(f_list) > 0:
             # print(f_list)
             c = Counter(f_list)
@@ -629,11 +604,8 @@ def GRPBY_ATTR(query):
             for el in f_list:
                 t_list.append(fields[el][0])
 
-                # print(t_list)
             c = Counter(t_list)
-                # print(c)
             d = dict(sorted(c.items()))
-                # print(d)
             t_list.clear()
             for el in d.items():
                 t_list.append(el[0])
@@ -645,41 +617,30 @@ def GRPBY_ATTR(query):
                 for el in f_list:
                     if fields.get(str(el)) and tab == str(fields[str(el)][0]):
                         tab_idx = tables[tab]  ###
-                            # table_string2[0] = table_string2[0][:tab_idx] + (str(int(table_string2[0][tab_idx]) + 1)) + \
-                            #                    table_string2[0][tab_idx + 1:]  ###
-                        table_string2[tab_idx]+=1
+                        table_string2[tab_idx] += 1
                         idx = fields[str(el)][1]
                         arr_string[-1] = arr_string[-1][:idx] + '1' + arr_string[-1][idx + 1:]
 
                 arr_string[-1] = arr_string[-1][::-1]  ###
                 table_vector3[tables[tab]] = int(arr_string[-1], 2)  ###
 
-    # grpby_attr[1] = [int(item) for item in table_string2[0]]  ###
-    grpby_attr[1]=table_string2
+    grpby_attr[1] = table_string2
     grpby_attr[2] = table_vector3
     grpby_attr[2] = list(grpby_attr[2])
-
-    #print(grpby_attr)
+    #print('group',t_list)
     return grpby_attr
 
 
-# Мысль больного разума. Он считает цифры в строковых значениях как числа. Как насчет сначала искать строки, потом их реплейсить, а потом искать числа
 def VALUE_CTR(query):
     value_ctr = [0, 0, 0, 0, 0]
     query = sqlparse.format(query, reindent=True, keyword_case='upper')
     parsed = sqlparse.parse(query)[0]
-    # print(parsed.tokens)
-
-    #print(query)
     copy_query = query
     strings = re.compile(r'[\'\"]([^\'\"]+)[\'\"][,\s)]?')
     strings_list = strings.findall(copy_query)
-    #print(strings_list)
-    #print(len(strings_list))
     if (len(strings_list)) > 0:
         value_ctr[0] = len(strings_list)
         s = "".join(strings_list)
-        #print(s)
         value_ctr[1] = len(s)
         # print(1)
         for el in strings_list:
@@ -687,17 +648,13 @@ def VALUE_CTR(query):
 
     copy_query = copy_query.replace("LIMIT ", "xxx")
 
-    #print('copy', copy_query)
-    # print(copy_query)
     numeric = re.compile(r'[\s(]([\d.]+)[,\s)]?')
     numeric_list = numeric.findall(copy_query)
-    #print(numeric_list)
     if len(numeric_list) > 0:
         value_ctr[2] = len(numeric_list)
 
     joins = re.compile(r'\b(JOIN)\b')
     joins_list = joins.findall(copy_query)
-    #print(joins_list)
     if len(joins_list) > 0:
         value_ctr[3] = len(joins_list)
 
@@ -706,28 +663,29 @@ def VALUE_CTR(query):
     if len(ands_list) > 0:
         value_ctr[4] = len(ands_list)
 
-    #print(value_ctr)
-
     return (value_ctr)
 
 
-def query_preprocessing(query):
-    sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr,combo_list = feature_extractor(query)
-    # Q = np.hstack([sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr])
-    Q = np.hstack([sql_cmd, proj_rel_dec,proj_attr_dec, value_ctr])
-    #print(Q)
-    #proj_attr_dec разное количество
-    return Q,combo_list
+def classic_vector_extractor(query):
+    sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr, combo_list = feature_extractor(
+        query)
+    Q = np.hstack([sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr])
+    return Q ##, combo_list
 
+def short_vector_extractor(query):
+    sql_cmd, proj_rel_dec, proj_attr_dec,  value_ctr = short_feature_extractor(
+        query)
+    Q = np.hstack([sql_cmd, proj_rel_dec, proj_attr_dec, value_ctr])
+    return Q
 
 
 def feature_extractor(query):
     sql_cmd = np.hstack(SQL_CMD(query))
     proj_attr, t_list2 = PROJ_ATTR(query)
     proj_attr_dec = np.hstack(proj_attr)
-    proj_rel,t_list1 = PROJ_REL(query)
-    proj_rel_dec =np.hstack(proj_rel)
-    sel_attr,t_list3 = SEL_ATTR(query)
+    proj_rel, t_list1 = PROJ_REL(query)
+    proj_rel_dec = np.hstack(proj_rel)
+    sel_attr, t_list3 = SEL_ATTR(query)
     sel_attr_dec = np.hstack(sel_attr)
     order_attr_dec = np.hstack(ORDER_ATTR(query))
     grpby_attr_dec = np.hstack(GRPBY_ATTR(query))
@@ -735,71 +693,159 @@ def feature_extractor(query):
 
     combo_list = t_list1 + t_list2 + t_list3
 
-    return sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr,combo_list
+    return sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr, combo_list
 
+def short_feature_extractor(query):
+    sql_cmd = np.hstack(SQL_CMD(query))
+    proj_attr, t_list2 = PROJ_ATTR(query)
+    proj_attr_dec = np.hstack(proj_attr)
+    proj_rel, t_list1 = PROJ_REL(query)
+    proj_rel_dec = np.hstack(proj_rel)
+    value_ctr = np.hstack(VALUE_CTR(query))
 
+    return sql_cmd, proj_rel_dec, proj_attr_dec ,value_ctr
 
-def cut_query_from_log(path,path_result):
+def cut_query_from_log(path, path_result):
     data = pd.read_csv(path, sep="\t", header=None)
-    data.columns = ["del1", "transaction", "query"]
-    data.drop('del1', axis=1, inplace=True)
-    transaction_numbering(data)
+    print(len(data.columns))
     print(data)
+    data.columns = ["del1", "transaction", "query","del2"]
+    #data.columns = ["del1", "transaction", "query"]
+    print(data.loc[0])
+    data.drop('del1', axis=1, inplace=True)
+    data.drop('del2', axis=1, inplace=True)
+    transaction_numbering(data)
+    # print(data)
     data['query'].replace('', np.nan, inplace=True)
     data.dropna(subset=['query'], inplace=True)
     data.insert(1, "role", 0)
 
+    # for index, rows in data.iterrows():
+    #     print(index)
+    #     if rows['query'] in tabu_list:
+    #         data.drop([index],inplace=True)
+    #     if data.loc[index]['query'] == 'rollback':
+    #         data.loc[index]["query"] = 'commit'
+    # print(data)
+    print('writing')
+    data.to_csv(path_result, sep='\t',index=False, header=False)
 
-    for index, rows in data.iterrows():
-        if rows['query'] in tabu_list:
-            data.drop([index],inplace=True)
-    print(data)
-    data.to_csv(path_result, index=False, header=False)
 
-def make_anomalies(path,path_result,percent):
-    data = pd.read_csv(path,sep=',',header=None)
+def make_anomalies(path, path_result, percent):
+    data = pd.read_csv(path, sep='\t', header=None)
     data.columns = ["transaction", 'role', "query"]
     data.drop([0], inplace=True)
-    print(data[-1:]['transaction'])
-    #count = (int(data['transaction'].max())*percent)//100
-    count = (int(data[-1:]['transaction'])*percent)//100
-    print(count)
-    #count =9
-    print('Количество аномалий(идут первыми) :',count)
-    all_roles = [0,1,2,3,4,5,6,7,8,9,10]
+    # print(data[-1:]['transaction'])
+    count = (int(data[-1:]['transaction']) * percent) // 100
+    # print(count)
+    # print('Количество аномалий(идут первыми) :',count)
+    all_roles = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     empty = 0
-    for i in range(1,count+1):
+    for i in range(1, count + 1):
         try:
-            r = data.loc[data['transaction']==str(i), 'role'].values[0]
+            r = data.loc[data['transaction'] == str(i), 'role'].values[0]
             c = all_roles.copy()
             c.remove(int(r))
             anomaly = random.choice(c)
             data.loc[(data['transaction'] == str(i)), 'role'] = str(anomaly)
         except:
-            empty = empty+1
-    print('Количество аномалий(идут первыми) :', count-empty)
+            empty = empty + 1
+    # print('Количество аномалий(идут первыми) :', count-empty)
 
-    data.to_csv(path_result,index=False,header=False)
-    f = open('data\\test\\anomaly_count.txt','w')
+    data.to_csv(path_result, sep='\t',index=False, header=False)
+    f = open('data\\test\\anomaly_count.txt', 'w')
     f.write(str(percent))
     f.write("\n")
-    f.write(str(count-empty))
+    f.write(str(count - empty))
     f.close()
 
 
+def frame_sort():
+    for f in frames:
+        f.sort()
+
+def make_classic_vectors(source,result):
+    start_time = time.time()
+    data = pd.read_csv(source, sep="\t", header=None)
+    data.columns = ["transaction", 'role', "query"]
+    print(data)
+    data.drop(data[data['query'] =='commit'].index,inplace=True)
+    data.reset_index()
+    data['query'] = data['query'].apply(lambda x: classic_vector_extractor(x).tolist())
+    d = data.to_dict('records')
+    f = open(result,'w',encoding='utf-8')
+    json.dump(d,f,ensure_ascii=False)
+    end_time = (time.time() - start_time)
+    print(result,"\t",end_time)
+    f2 = open(lead_time,'w',encoding='utf-8')
+    f2.write(json.dumps((result,end_time),ensure_ascii=False))
+    f2.close()
+
+def make_short_vectors(source,result):
+    start_time = time.time()
+    data = pd.read_csv(source, sep="\t", header=None)
+    data.columns = ["transaction", 'role', "query"]
+    print(data)
+    data.drop(data[data['query'] =='commit'].index,inplace=True)
+    data.reset_index()
+    data['query'] = data['query'].apply(lambda x: short_vector_extractor(x).tolist())
+    d = data.to_dict('records')
+    f = open(result,'w',encoding='utf-8')
+    json.dump(d,f,ensure_ascii=False)
+    end_time = (time.time() - start_time)
+    print(result,"\t",end_time)
+
+def make_transaction_vectors(source, result):
+    start_time = time.time()
+    data = pd.read_csv(source, sep="\t", header=None)
+    data.columns = ["transaction", 'role', "query"]
+    #print(data)
+    data.drop(data[data['query'] == 'commit'].index, inplace=True)
+    data.reset_index()
+    new_list =[]
+    role_list_new =[]
+    #print('HER',data.iloc[-1]['transaction'])
+
+    data['query'] = data['query'].apply(lambda x: classic_vector_extractor(x).tolist())
+    for i in range (1,data.iloc[-1]['transaction']+1):
+        trans_num=i
+        new_vector = []
+        role = 0
+        queries = data.loc[data['transaction'] == i]
+        for index, rows in queries.iterrows():
+            new_vector= new_vector+list(rows['query'])
+            role = rows['role']
+        ext= 6042 - len(new_vector)
+        new_vector = new_vector+[0]*ext
+        #print('LEN',len(new_vector))
+        #print(new_vector)
+        new_list.append(new_vector)
+        role_list_new.append(role)
+
+    data = pd.DataFrame(list(zip(role_list_new,new_list)),columns =['role','query'])
+
+    d = data.to_dict('records')
+    f = open(result, 'w', encoding='utf-8')
+    json.dump(d, f, ensure_ascii=False)
+    end_time = (time.time() - start_time)
+    print(result, "\t", end_time)
+    f2 = open(lead_time, 'w', encoding='utf-8')
+    f2.write(json.dumps((result, end_time), ensure_ascii=False))
+    f2.close()
 
 if __name__ == '__main__':
-    # ПРОВЕРИТЬ КАКОГО ХЕРА FOR в большинстве экстракторов захватывает все действо. Возможны избыточные циклы.
+
+    make_classic_vectors(source_data_train,result_data_train)
+    make_classic_vectors(source_data_test, result_data_test)
+    #make_short_vectors(source_data_train,result_short_data_train)
+    #make_short_vectors(source_data_test, result_short_data_test)
+    #make_transaction_vectors(source_data_train, result_data_train)
+    #make_transaction_vectors(source_data_test, result_data_test)
+
     #cut_query_from_log(source_path1,path_result1)
-    data = pd.read_csv(path_result1, sep=",", header=None)
-    transaction_iterator(data,path_trainXvector1)
-    # # #
-    # cut_query_from_log(source_path2, path_result2)
-    data2 = pd.read_csv(path_result2, sep=",", header=None)
-    transaction_iterator(data2, path_testXvector1)
-
-    make_anomalies(path_testXvector1,path_testXvectorAnomal1,25)
-
-
-
-
+    #data = pd.read_csv(path_result1, sep="\t", header=None)
+    #transaction_iterator(data,path_trainXvector1)
+    #cut_query_from_log(source_path2, path_result2)
+    # data2 = pd.read_csv(path_result2, sep=",", header=None)
+    # transaction_iterator(data2, path_testXvector1)
+    # make_anomalies(path_testXvector1,path_testXvectorAnomal1,25)
