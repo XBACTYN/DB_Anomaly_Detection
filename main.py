@@ -14,25 +14,28 @@ from sqlparse.sql import IdentifierList, TokenList, Parenthesis
 from nltk.tokenize import RegexpTokenizer
 
 
-MAX_COLUMNS = 30
-NUM_TABLES = 34
-source_path1 = 'data\\preprocessing\\raw_logs3.txt'
-source_path2 = 'data\\preprocessing\\raw_logs4.txt'
+MAX_COLUMNS = 24
+NUM_TABLES = 33
 
-path_result1 = 'data\\preprocessing\\cutted_queries3.csv'
-path_result2 = 'data\\preprocessing\\cutted_queries4.csv'
+source_data_train = 'data\\preprocessing\\GENERATED_raw_logs_train.txt'
+source_data_test = 'data\\preprocessing\\GENERATED_raw_logs_test.txt'
+source_data_valid = 'data\\preprocessing\\GENERATED_raw_logs_valid.txt'
 
-source_data_train = 'data\\preprocessing\\GENERATED_raw_logs_1.txt'
-source_data_test = 'data\\preprocessing\\GENERATED_raw_logs_test_1.txt'
-result_data_train = 'data\\train\\GENERATED_classic_vectors_train_1.json'
-result_data_test = 'data\\test\\GENERATED_classic_vectors_test_1.json'
-result_short_data_train = 'data\\train\\GENERATED_short_vectors_train.json'
-result_short_data_test = 'data\\test\\GENERATED_short_vectors_test.json'
+result_data_train_classic = 'data\\train\\GENERATED_classic_vectors_train.json'
+result_data_test_classic = 'data\\test\\GENERATED_classic_vectors_test.json'
+result_data_valid_classic = 'data\\train\\GENERATED_classic_vectors_valid.json'
+
+
+result_data_train_transaction = 'data\\train\\GENERATED_transaction_vectors_train.json'
+result_data_test_transaction = 'data\\test\\GENERATED_transaction_vectors_test.json'
+result_data_valid_transaction= 'data\\train\\GENERATED_transaction_vectors_valid.json'
+
+
 lead_time = 'data\\making_vectors.json'
 
-path_trainXvector1 = 'data\\train\\train_vectors31.csv'
-path_testXvector1 = 'data\\test\\test_vectors41.csv'
-path_testXvectorAnomal1 = 'data\\test\\test_vectors_anomaly42.csv'
+# path_trainXvector1 = 'data\\train\\train_vectors31.csv'
+# path_testXvector1 = 'data\\test\\test_vectors41.csv'
+# path_testXvectorAnomal1 = 'data\\test\\test_vectors_anomaly42.csv'
 
 
 type_matrix = np.array(
@@ -42,10 +45,10 @@ tables = {'account_permission': 0, 'address': 1, 'broker': 2, 'cash_transaction'
           'company': 6, 'company_competitor': 7, 'customer': 8,
           'customer_account': 9, 'customer_taxrate': 10, 'daily_market': 11, 'exchange': 12, 'financial': 13,
           'holding': 14, 'holding_history': 15, 'holding_summary': 16,
-          'industry': 17, 'last_trade': 18, 'news_item': 19, 'news_xref': 20, 'sector': 21, 'security': 22,
-          'seq_trade_id': 23, 'settlement': 24, 'status_type': 25, 'taxrate': 26,
-          'trade': 27, 'trade_history': 28, 'trade_request': 29, 'trade_type': 30, 'watch_item': 31, 'watch_list': 32,
-          'zip_code': 33}
+          'industry': 17, 'last_trade': 18, 'news_xref': 19, 'sector': 20, 'security': 21,
+          'seq_trade_id': 22, 'settlement': 23, 'status_type': 24, 'taxrate': 25,
+          'trade': 26, 'trade_history': 27, 'trade_request': 28, 'trade_type': 29, 'watch_item': 30, 'watch_list': 31,
+          'zip_code': 32}
 
 # [0]- тип запроса [1] - индекс листа с таблицами [2] - индекс листа с полями
 query_mode = {'SELECT': [1, 6, 2], 'INSERT': [2, 4, 4], 'UPDATE': [3, 2, 6], 'DELETE': [4, 4]}
@@ -188,10 +191,6 @@ def transaction_numbering(data):
             if data.loc[index]['query'] == 'commit':
                 #if data.loc[int(index) + 1]['query'] != 'commit':
                 num = num + 1
-                    #print(index)
-                #else:
-                    #data.drop([index], inplace=True)
-                    #continue
         # rows['transaction'] = num
         data.loc[index]['transaction'] = num
     print("numbering ends")
@@ -374,7 +373,7 @@ def PROJ_REL(query):
     #print(proj_rel)
     #proj_rel[1] = int(proj_rel[1], 2)#####################################################################################
     #print('proj rel', t_list)
-    return proj_rel, t_list #list(map(str, new_list))
+    return proj_rel#, t_list #list(map(str, new_list))
 
 
 def PROJ_ATTR(query):
@@ -397,7 +396,7 @@ def PROJ_ATTR(query):
             proj_attr[1] = [int(item) for item in table_string2[0]]
             table_vector3 = np.zeros(NUM_TABLES, int)  ###
             proj_attr[2] = list(table_vector3)
-            return proj_attr, t_list
+            return proj_attr#, t_list
         if t == 'SELECT':
             tokenizer = RegexpTokenizer(r'\w+')
             S = re.compile(r'SELECT([^"]*)FROM')
@@ -450,7 +449,7 @@ def PROJ_ATTR(query):
     proj_attr[2] = table_vector3
     proj_attr[2] = list(proj_attr[2])
     #print('proj attr',t_list)
-    return proj_attr, t_list
+    return proj_attr#, t_list
 
 
 def SEL_ATTR(query):
@@ -510,7 +509,7 @@ def SEL_ATTR(query):
     sel_attr[2] = table_vector3
     sel_attr[2] = list(sel_attr[2])
     #print('select attr',t_list)
-    return sel_attr, t_list
+    return sel_attr#, t_list
 
 
 def ORDER_ATTR(query):
@@ -667,9 +666,9 @@ def VALUE_CTR(query):
 
 
 def classic_vector_extractor(query):
-    sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr, combo_list = feature_extractor(
-        query)
+    sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr = feature_extractor(query)
     Q = np.hstack([sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr])
+    #print(time.time())
     return Q ##, combo_list
 
 def short_vector_extractor(query):
@@ -681,19 +680,19 @@ def short_vector_extractor(query):
 
 def feature_extractor(query):
     sql_cmd = np.hstack(SQL_CMD(query))
-    proj_attr, t_list2 = PROJ_ATTR(query)
+    proj_attr= PROJ_ATTR(query)
     proj_attr_dec = np.hstack(proj_attr)
-    proj_rel, t_list1 = PROJ_REL(query)
+    proj_rel = PROJ_REL(query)
     proj_rel_dec = np.hstack(proj_rel)
-    sel_attr, t_list3 = SEL_ATTR(query)
+    sel_attr= SEL_ATTR(query)
     sel_attr_dec = np.hstack(sel_attr)
     order_attr_dec = np.hstack(ORDER_ATTR(query))
     grpby_attr_dec = np.hstack(GRPBY_ATTR(query))
     value_ctr = np.hstack(VALUE_CTR(query))
 
-    combo_list = t_list1 + t_list2 + t_list3
+    #combo_list = t_list1 + t_list2 + t_list3
 
-    return sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr, combo_list
+    return sql_cmd, proj_rel_dec, proj_attr_dec, sel_attr_dec, order_attr_dec, grpby_attr_dec, value_ctr#, combo_list
 
 def short_feature_extractor(query):
     sql_cmd = np.hstack(SQL_CMD(query))
@@ -760,10 +759,6 @@ def make_anomalies(path, path_result, percent):
     f.close()
 
 
-def frame_sort():
-    for f in frames:
-        f.sort()
-
 def make_classic_vectors(source,result):
     start_time = time.time()
     data = pd.read_csv(source, sep="\t", header=None)
@@ -777,34 +772,17 @@ def make_classic_vectors(source,result):
     json.dump(d,f,ensure_ascii=False)
     end_time = (time.time() - start_time)
     print(result,"\t",end_time)
-    f2 = open(lead_time,'w',encoding='utf-8')
-    f2.write(json.dumps((result,end_time),ensure_ascii=False))
-    f2.close()
+    print(f'Done {result}')
 
-def make_short_vectors(source,result):
-    start_time = time.time()
-    data = pd.read_csv(source, sep="\t", header=None)
-    data.columns = ["transaction", 'role', "query"]
-    print(data)
-    data.drop(data[data['query'] =='commit'].index,inplace=True)
-    data.reset_index()
-    data['query'] = data['query'].apply(lambda x: short_vector_extractor(x).tolist())
-    d = data.to_dict('records')
-    f = open(result,'w',encoding='utf-8')
-    json.dump(d,f,ensure_ascii=False)
-    end_time = (time.time() - start_time)
-    print(result,"\t",end_time)
 
 def make_transaction_vectors(source, result):
     start_time = time.time()
     data = pd.read_csv(source, sep="\t", header=None)
     data.columns = ["transaction", 'role', "query"]
-    #print(data)
     data.drop(data[data['query'] == 'commit'].index, inplace=True)
     data.reset_index()
     new_list =[]
     role_list_new =[]
-    #print('HER',data.iloc[-1]['transaction'])
 
     data['query'] = data['query'].apply(lambda x: classic_vector_extractor(x).tolist())
     for i in range (1,data.iloc[-1]['transaction']+1):
@@ -815,10 +793,9 @@ def make_transaction_vectors(source, result):
         for index, rows in queries.iterrows():
             new_vector= new_vector+list(rows['query'])
             role = rows['role']
-        ext= 6042 - len(new_vector)
+            ######################################## 6042 нужно поменять
+        ext= 6180 - len(new_vector)
         new_vector = new_vector+[0]*ext
-        #print('LEN',len(new_vector))
-        #print(new_vector)
         new_list.append(new_vector)
         role_list_new.append(role)
 
@@ -829,23 +806,19 @@ def make_transaction_vectors(source, result):
     json.dump(d, f, ensure_ascii=False)
     end_time = (time.time() - start_time)
     print(result, "\t", end_time)
-    f2 = open(lead_time, 'w', encoding='utf-8')
-    f2.write(json.dumps((result, end_time), ensure_ascii=False))
-    f2.close()
+    print(f'Done {result}')
 
 if __name__ == '__main__':
+    #Вектор 309
+    #максимальная длина 20
+    #6180
 
-    make_classic_vectors(source_data_train,result_data_train)
-    make_classic_vectors(source_data_test, result_data_test)
-    #make_short_vectors(source_data_train,result_short_data_train)
-    #make_short_vectors(source_data_test, result_short_data_test)
-    #make_transaction_vectors(source_data_train, result_data_train)
-    #make_transaction_vectors(source_data_test, result_data_test)
+    #make_classic_vectors(source_data_train,result_data_train_classic)
+    #make_classic_vectors(source_data_test, result_data_test_classic)
+    #make_classic_vectors(source_data_valid,result_data_valid_classic)
 
-    #cut_query_from_log(source_path1,path_result1)
-    #data = pd.read_csv(path_result1, sep="\t", header=None)
-    #transaction_iterator(data,path_trainXvector1)
-    #cut_query_from_log(source_path2, path_result2)
-    # data2 = pd.read_csv(path_result2, sep=",", header=None)
-    # transaction_iterator(data2, path_testXvector1)
-    # make_anomalies(path_testXvector1,path_testXvectorAnomal1,25)
+    make_transaction_vectors(source_data_train, result_data_train_transaction)
+    make_transaction_vectors(source_data_test, result_data_test_transaction)
+    make_transaction_vectors(source_data_valid, result_data_valid_transaction)
+
+
