@@ -12,26 +12,25 @@ from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, r
 system_random = random.SystemRandom()
 # source_Xy_train = 'data\\train\\GENERATED_transaction_vectors_train_1.json'
 # source_Xy_test = 'data\\test\\GENERATED_transaction_vectors_test_1.json'
-source_Xy_train = 'data\\train\\GENERATED_classic_vectors_train_1.json'
-source_Xy_test = 'data\\test\\GENERATED_classic_vectors_test_1.json'
-source_XyV2_train = 'data\\train\\GENERATED_short_vectors_train.json'
-source_XyV2_test = 'data\\test\\GENERATED_short_vectors_test.json'
+#source_Xy_train = 'data\\train\\GENERATED_classic_vectors_valid.json'   #110069
+#source_Xy_train = 'data\\test\\GENERATED_classic_vectors_test.json'      # 11017
+#source_Xy_train = 'data\\train\\GENERATED_classic_vectors_train.json'    #110069
 
 def unpack_data(path):
-    #transactions_list = []
+    transactions_list = []
     role_list = []
     query_list = []
     f = open(path, 'r', encoding='utf-8')
     data = json.load(f)
-    for i in range(0,len(data)//10):
-        #transactions_list.append(data[i].get('transaction'))
+    for i in range(0,len(data)):
+        transactions_list.append(data[i].get('transaction'))
         role_list.append(data[i].get('role'))
         query_list.append(np.array(data[i].get('query')))
     X = np.array(query_list)
     y = np.array(role_list)
     #print(transactions_list)
     print('unpacked')
-    return X,y
+    return X,y,transactions_list
 
 def make_anomalies(y_test,percent):
     list1 = [1,2,3,4,5,6,7,8,9,10,11]
@@ -66,7 +65,7 @@ def plot_confusion_matrix(cm, str,classes,normalize = False,
         plt.tight_layout()
         plt.ylabel(f'{str} label', size = 18)
         plt.xlabel('Predicted label', size = 18)
-    plt.savefig(f'{str}_classic.jpg')
+    plt.savefig(f'{str}.jpg')
 
 def RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test,count):
     print('start forest')
@@ -83,8 +82,10 @@ def RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test,count):
     # performance evaluatio metrics
     print(classification_report(y_pred, y_test))
     anomalies_count = count
+    print(y_pred[:count])
+    print(y_test_anomalies[:count])
     diff_values = sum(el1 !=el2 for el1,el2 in zip(y_pred[:count],y_test_anomalies[:count]))
-    print(y_pred)
+    print(diff_values)
     detection_rate = (diff_values/anomalies_count)*100
     print('anomalies count ',anomalies_count)
     print('detection rate ',detection_rate)
@@ -92,9 +93,9 @@ def RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test,count):
     accuracy_score(y_test, y_pred)
     print(f"The accuracy of the model is {round(accuracy_score(y_test, y_pred), 3) * 100} %")
     cm = confusion_matrix(y_test, y_pred)
-    cm2 = confusion_matrix(y_test_anomalies,y_pred)
+    cm2 = confusion_matrix(y_test_anomalies[:count],y_pred[:count])
     plot_confusion_matrix(cm,'True', classes=[1, 2,3,4,5,6,7,8,9,10,11],title='Confusion Matrix')
-    plot_confusion_matrix(cm2, 'Anomalies',classes=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11], title='Detect Anomalies Confusion Matrix')
+    plot_confusion_matrix(cm2, 'Anomalies',classes=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11], title='Confusion Matrix')
     plt.show()
     # param_grid = {
     #     'n_estimators': [25, 50, 100, 150],
@@ -108,24 +109,16 @@ def RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test,count):
     # grid_search.fit(X_train, y_train)
     # print(grid_search.best_estimator_)
 
-X_train,y_train = unpack_data(source_Xy_train)
-print(len(X_train[0]))
-print(len(X_train))
-lst = list(zip(X_train,y_train))
-random.shuffle(lst)
-X_train,y_train = zip(*lst)
-X_test, y_test = unpack_data(source_Xy_test)
-y_test_anomalies,count = make_anomalies(y_test,10)
-
-# a = [1,2,3,4]
-# b=['a','b','c','d']
-# c =['а1','a2','a3','a4']
-# lst2= list(zip(a,b,c))
-# random.shuffle(lst2)
-# a,b,c, = zip(*lst2)
-# print(a)
-# print(b)
-# print(c)
+X_train,y_train,transactions = unpack_data(source_Xy_train)
+print(len(transactions))
+# print(len(X_train[0]))
+# print(len(X_train))
+# lst = list(zip(X_train,y_train))
+# random.shuffle(lst)
+# X_train,y_train = zip(*lst)
+# X_test, y_test = unpack_data(source_Xy_test)
+# y_test_anomalies,count = make_anomalies(y_test,15)
 
 
-RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test,count)
+
+# RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test,count)
