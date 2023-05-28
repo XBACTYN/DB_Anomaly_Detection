@@ -4,22 +4,17 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report
 import time
-import itertools
 import pandas as pd
 import seaborn as sns
-import tensorflow as tf
 import matplotlib.pyplot as plt
-from sklearn.pipeline import make_pipeline
-from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, roc_auc_score, roc_curve, f1_score
+from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.naive_bayes import GaussianNB
-from sklearn.naive_bayes import MultinomialNB
-from sklearn import svm
+
+result_data_train_vec = 'data\\train\\GENERATED_new_vectors_train.json'
+result_data_test_vec = 'data\\test\\GENERATED_new_vectors_test.json'
 
 
 system_random = random.SystemRandom()
-# source_Xy_train = 'data\\train\\GENERATED_transaction_vectors_train_1.json'
-# source_Xy_test = 'data\\test\\GENERATED_transaction_vectors_test_1.json'
-#source_Xy_train = 'data\\train\\GENERATED_classic_vectors_valid.json'
 source_Xy_test = 'data\\test\\GENERATED_classic_vectors_test.json'
 source_Xy_train = 'data\\train\\GENERATED_classic_vectors_train.json'
 source_Xy_test_1 = 'data\\test\\GENERATED_transaction_vectors_test.json'
@@ -65,7 +60,7 @@ def plot_confusion_matrix(y_true,y_pred,name,vector_type):
     ## Ticket labels - List must be in alphabetical order
     ax.xaxis.set_ticklabels(classes)
     ax.yaxis.set_ticklabels(classes)
-    #fig.savefig(f'{result_path}{vector_type}_confus_{name}_SVM.png')
+    fig.savefig(f'{result_path}{vector_type}_confus_{name}.png')
 
 
 
@@ -83,15 +78,26 @@ def RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test,count,vector_typ
     print('время предсказания ', end_time)
 
     # performance evaluatio metrics
-    print(classification_report(y_pred, y_test))
+    report = classification_report(y_pred, y_test,output_dict=True)
+    df = pd.DataFrame(report).transpose()[:12]
+    print(df['f1-score'].mean())
+    df = df.drop('support', axis=1)
+    print(df)
+    df.plot( figsize= (8,4),kind='bar')
+
+
     anomalies_count = count
     print(y_pred[:count])
     print(y_test_anomalies[:count])
-    diff_values = sum(el1 !=el2 for el1,el2 in zip(y_pred[:count],y_test_anomalies[:count]))
-    print(diff_values)
-    detection_rate = (diff_values/anomalies_count)*100
-    print('anomalies count ',anomalies_count)
-    print('detection rate ',detection_rate)
+    anomal_values = sum(el1 == el2 and el1 != el3 for el1, el2, el3 in zip(y_pred[:count], y_test[:count], y_test_anomalies[:count]))
+    detection_rate = (anomal_values / anomalies_count) * 100
+    print('anomalies count ', anomalies_count)
+    print('detection rate ', detection_rate)
+
+    false_anomalies = sum(
+        el1 != el2 and el1 != el3 for el1, el2, el3 in zip(y_pred[:count], y_test[:count], y_test_anomalies[:count]))
+    false_positive_rate = (false_anomalies / count) * 100
+    print('false trigger', false_positive_rate)
 
     accuracy_score(y_test, y_pred)
     print(f"The accuracy of the model is {round(accuracy_score(y_test, y_pred), 3) * 100} %")
@@ -104,45 +110,50 @@ def Gauss(X_train,y_train,X_test,y_test_anomalies,y_test,count,vector_type):
     gnb = GaussianNB()
     gnb.fit(X_train, y_train)
     y_pred = gnb.predict(X_test)
+    report = classification_report(y_pred, y_test, output_dict=True)
+    df = pd.DataFrame(report).transpose()[:12]
+    print(df['f1-score'].mean())
+    df = df.drop('support', axis=1)
+    print(df)
+    df.plot(figsize=(8, 4), kind='bar')
+
+    anomalies_count = count
+    print(y_pred[:count])
+    print(y_test_anomalies[:count])
+    anomal_values = sum(
+        el1 == el2 and el1 != el3 for el1, el2, el3 in zip(y_pred[:count], y_test[:count], y_test_anomalies[:count]))
+    detection_rate = (anomal_values / anomalies_count) * 100
+    print('anomalies count ', anomalies_count)
+    print('detection rate ', detection_rate)
+
+    false_anomalies = sum(
+        el1 != el2 and el1 != el3 for el1, el2, el3 in zip(y_pred[:count], y_test[:count], y_test_anomalies[:count]))
+    false_positive_rate = (false_anomalies / count) * 100
+    print('false trigger', false_positive_rate)
+
     accuracy_score(y_test, y_pred)
-
-    print(classification_report(y_pred, y_test))
-    anomalies_count = count
-    print(y_pred[:count])
-    print(y_test_anomalies[:count])
-    diff_values = sum(el1 != el2 for el1, el2 in zip(y_pred[:count], y_test_anomalies[:count]))
-    print(diff_values)
-    detection_rate = (diff_values / anomalies_count) * 100
-    print('anomalies count ', anomalies_count)
-    print('detection rate ', detection_rate)
-    plot_confusion_matrix(y_test, y_pred, 'Истинные',vector_type)
-    plot_confusion_matrix(y_test_anomalies[:count], y_pred[:count], 'Аномальные',vector_type)
-    plt.show()
-
-
-def SVM(X_train,y_train,X_test,y_test_anomalies,y_test,count,vector_type):
-    clf = svm.SVC(decision_function_shape='ovr')
-    clf.fit(X_train, y_train)
-    y_pred = clf.predict(X_test)
-    print(classification_report(y_pred, y_test))
-    anomalies_count = count
-    print(y_pred[:count])
-    print(y_test_anomalies[:count])
-    diff_values = sum(el1 != el2 for el1, el2 in zip(y_pred[:count], y_test_anomalies[:count]))
-    print(diff_values)
-    detection_rate = (diff_values / anomalies_count) * 100
-    print('anomalies count ', anomalies_count)
-    print('detection rate ', detection_rate)
+    print(f"The accuracy of the model is {round(accuracy_score(y_test, y_pred), 3) * 100} %")
     plot_confusion_matrix(y_test, y_pred, 'Истинные', vector_type)
     plot_confusion_matrix(y_test_anomalies[:count], y_pred[:count], 'Аномальные', vector_type)
     plt.show()
 
+
+
+
 X_train,y_train = unpack_data(source_Xy_train_1)
 X_test, y_test = unpack_data(source_Xy_test_1)
 y_test_anomalies,count = make_anomalies(y_test,25)
+
+# X_train,y_train = unpack_data(result_data_train_vec)
+# X_test, y_test = unpack_data(result_data_test_vec)
+# y_test_anomalies,count = make_anomalies(y_test,25)
+
 
 
 #RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test,count,'quiplet')
 #RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test,count,'hexplet')
 #Gauss(X_train,y_train,X_test,y_test_anomalies,y_test,count,'hexplet')
 #SVM(X_train,y_train,X_test,y_test_anomalies,y_test,count,'quiplet')
+
+#RandomForest(X_train,y_train,X_test,y_test_anomalies,y_test,count,'ass')
+Gauss(X_train,y_train,X_test,y_test_anomalies,y_test,count,'asdas')

@@ -1,16 +1,12 @@
-import random
-from collections import Counter
 
+from collections import Counter
 import numpy as np
 import pandas as pd
 import re
 import time
-import regex
 import json
 import sqlparse
-import swifter
-from sklearn.cluster import KMeans
-from sqlparse.sql import IdentifierList, TokenList, Parenthesis
+from sqlparse.sql import IdentifierList, TokenList
 from nltk.tokenize import RegexpTokenizer
 
 
@@ -32,10 +28,6 @@ result_data_valid_transaction= 'data\\train\\GENERATED_transaction_vectors_valid
 
 
 lead_time = 'data\\making_vectors.json'
-
-# path_trainXvector1 = 'data\\train\\train_vectors31.csv'
-# path_testXvector1 = 'data\\test\\test_vectors41.csv'
-# path_testXvectorAnomal1 = 'data\\test\\test_vectors_anomaly42.csv'
 
 
 type_matrix = np.array(
@@ -170,7 +162,6 @@ tpce_roles = {'0': 1, '1': 2, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 6, '8
 
 def transaction_numbering(data):
     num = 0
-    print('drop waste')
     print(data.last_valid_index())
     for index, rows in data.iterrows():
         print(index)
@@ -179,9 +170,6 @@ def transaction_numbering(data):
         if data.loc[index]['query'] in tabu_list:
             data.drop([index], inplace=True)
     print('numbering')
-    # count = data.shape[0]
-    # print('count',count)
-    # data.reindex(range(count), method='ffill')
     last = data.last_valid_index()
     print("last",last)
     for index, rows in data.iterrows():
@@ -195,125 +183,6 @@ def transaction_numbering(data):
         data.loc[index]['transaction'] = num
     print("numbering ends")
 
-
-def transaction_iterator(data, path_result):
-    data.columns = ["transaction", 'role', "query"]
-    count = int(data['transaction'].max()) #+ 1
-    count = 10000
-    combo_list = []
-    type_list = []
-    new_data_transactions = []
-    new_data_vectors = []
-    for i in range(1, count + 1):
-        trans_num = i
-        # print('Транзакция ',trans_num)
-        combo_list.clear()
-        type_list.clear()
-        queries = data.loc[data['transaction'] == i]
-        for index, rows in queries.iterrows():
-            if rows['query'] != "commit":
-                #print(rows['query'])
-                vector, t_list = classic_vector_extractor(rows['query'])
-                combo_list = combo_list + t_list
-                type_list.append(vector[0])
-                new_data_vectors.append(vector)
-                new_data_transactions.append(trans_num)
-
-        role_determinant(combo_list, type_list, trans_num)
-    #roles_file = open('data\\preprocessing\\roles.txt')
-    #json.dump(roles,roles_file,ensure_ascii=False)
-    roles_l = []
-    for el in (new_data_transactions):
-        roles_l.append(roles.get(str(el)))
-    #print(roles_l)
-    c = Counter(roles_l)
-    d = dict(sorted(c.items()))
-    pr_list =[]
-    for el in d.items():
-        pr_list.append(el[0])
-    print(pr_list)
-    df = pd.DataFrame({'Transaction': new_data_transactions,'Role': roles_l,'Query_Vector': new_data_vectors})
-    df.to_csv(path_result,sep='\t', index=False)
-
-
-def role_determinant(combo_list, type_list, trans_num):
-    c = Counter(combo_list)
-    d = dict(sorted(c.items()))
-    combo_list.clear()
-    for el in d.items():
-        combo_list.append(el[0])
-    combo_list.sort()
-    t = Counter(type_list)
-    z = dict(sorted(t.items()))
-    type_list.clear()
-    for i in range(1, 5):
-        if z.get(i, 0) == 0:
-            type_list.append(0)
-        else:
-            type_list.append(i)
-    #print('combo list',combo_list)
-    max = 0
-    prefer_role =0
-    for j in range(0,len(frames)):
-        #print(frames[j],' number ',j)
-        count = len(list(set(combo_list)&set(frames[j])))
-        #print(count)
-        if count>max:
-            max = count
-            prefer_role=tpce_roles.get(str(j))
-        # if combo_list== frames[j]:
-        #     roles.update({str(trans_num): tpce_roles.get(str(j))})
-        #     print('SUCCESS',trans_num)
-        # else:
-        #     print('ERROR transaction',trans_num)
-    #print('prefer role ',prefer_role)
-    roles.update({str(trans_num): tpce_roles.get(str(prefer_role))})
-    # m = np.zeros(34, dtype=int)
-    # for el in combo_list:
-    #     m[tables.get(el)] = 1
-    # # Приоритет по первой строке. По максимуму второй берем по индексу элементы из первой,находим там максимум(ы).
-    # # Если много максимумов, приоритет на полностью совпадающие type
-    #
-    # result_1 = transaction_matrix - m
-    # judge_array = (result_1 == 0).sum(1)
-    #
-    # result_2 = type_matrix - type_list
-    # # judge_array_2 = (result_2>=0).sum(1)
-    # judge_array_2 = (result_2 == 0).sum(1)
-    # mat = np.array([judge_array_2, judge_array])
-    # max_1 = max(mat[0])
-    # ind, = np.where(mat[0] == max_1)
-    # best_arr = mat.copy()
-    # num = best_arr.shape[1]
-    # for i in range(0, num):
-    #     if i not in ind:
-    #         best_arr[0, i] = 0
-    #         best_arr[1, i] = 0
-    # max_2 = max(best_arr[1])
-    # idxs, = np.where(best_arr[1] == max_2)
-    # same_trans = []
-    # if len(idxs) > 1:
-    #     for j in idxs:
-    #         if np.array_equal(type_list, type_matrix[j]):
-    #             same_trans.append(j)
-    #     if len(same_trans) > 1:
-    #         r = random.choice(same_trans)
-    #         roles.update({str(trans_num): int(r)})
-    #
-    #     if len(same_trans) == 1:
-    #         roles.update({str(trans_num): int(same_trans[0])})
-    #
-    #     if not roles.get(str(trans_num), False):
-    #         r = random.choice(idxs)
-    #         roles.update({str(trans_num): int(r)})
-    #
-    # if len(idxs) == 1:
-    #     roles.update({str(trans_num): int(idxs[0])})
-
-
-# def role_distributor(data, roles_dict):
-#     for index, rows in data.iterrows():
-#         rows['role'] = roles_dict.get(str(rows['transaction']))
 
 
 def SQL_CMD(query):
@@ -362,17 +231,9 @@ def PROJ_REL(query):
             if indx:
                 arr_string[-1] = arr_string[-1][:indx] + '1' + arr_string[-1][indx + 1:]
 
-    #print(arr_string)
     arr_string[-1] = arr_string[-1][::-1]
     proj_rel[1] =[int(i) for i in arr_string[0]]
-    #print(proj_rel)
-    #proj_rel[1] = arr_string[0]
-    #proj_rel[1] = proj_rel[1][::-1]
 
-    #proj_rel[1] = list(proj_rel[1])
-    #print(proj_rel)
-    #proj_rel[1] = int(proj_rel[1], 2)#####################################################################################
-    #print('proj rel', t_list)
     return proj_rel#, t_list #list(map(str, new_list))
 
 
@@ -718,45 +579,9 @@ def cut_query_from_log(path, path_result):
     data['query'].replace('', np.nan, inplace=True)
     data.dropna(subset=['query'], inplace=True)
     data.insert(1, "role", 0)
-
-    # for index, rows in data.iterrows():
-    #     print(index)
-    #     if rows['query'] in tabu_list:
-    #         data.drop([index],inplace=True)
-    #     if data.loc[index]['query'] == 'rollback':
-    #         data.loc[index]["query"] = 'commit'
-    # print(data)
     print('writing')
     data.to_csv(path_result, sep='\t',index=False, header=False)
 
-
-def make_anomalies(path, path_result, percent):
-    data = pd.read_csv(path, sep='\t', header=None)
-    data.columns = ["transaction", 'role', "query"]
-    data.drop([0], inplace=True)
-    # print(data[-1:]['transaction'])
-    count = (int(data[-1:]['transaction']) * percent) // 100
-    # print(count)
-    # print('Количество аномалий(идут первыми) :',count)
-    all_roles = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    empty = 0
-    for i in range(1, count + 1):
-        try:
-            r = data.loc[data['transaction'] == str(i), 'role'].values[0]
-            c = all_roles.copy()
-            c.remove(int(r))
-            anomaly = random.choice(c)
-            data.loc[(data['transaction'] == str(i)), 'role'] = str(anomaly)
-        except:
-            empty = empty + 1
-    # print('Количество аномалий(идут первыми) :', count-empty)
-
-    data.to_csv(path_result, sep='\t',index=False, header=False)
-    f = open('data\\test\\anomaly_count.txt', 'w')
-    f.write(str(percent))
-    f.write("\n")
-    f.write(str(count - empty))
-    f.close()
 
 
 def make_classic_vectors(source,result):
@@ -813,9 +638,9 @@ if __name__ == '__main__':
     #максимальная длина 20
     #6180
 
-    #make_classic_vectors(source_data_train,result_data_train_classic)
-    #make_classic_vectors(source_data_test, result_data_test_classic)
-    #make_classic_vectors(source_data_valid,result_data_valid_classic)
+    make_classic_vectors(source_data_train,result_data_train_classic)
+    make_classic_vectors(source_data_test, result_data_test_classic)
+    make_classic_vectors(source_data_valid,result_data_valid_classic)
 
     make_transaction_vectors(source_data_train, result_data_train_transaction)
     make_transaction_vectors(source_data_test, result_data_test_transaction)

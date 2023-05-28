@@ -396,7 +396,7 @@ def gen(count_for_each_role,path):
     print(f'Done {path}')
 
 
-gen(1000,path_result_train)
-gen(100,path_result_valid)
-gen(100,path_result_test)
+#gen(1000,path_result_train)
+#gen(100,path_result_valid)
+#gen(100,path_result_test)
 

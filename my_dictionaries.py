@@ -108,3 +108,12 @@ fields = {'ap_ca_id': ['account_permission', 0, 0 ], 'ap_acl': ['account_permiss
           'wi_wl_id': ['watch_item', 0,0], 'wi_s_symb': ['watch_item', 1,1], 'wl_id': ['watch_list', 0,0],
           'wl_c_id': ['watch_list', 1,0],
           'zc_code': ['zip_code', 0,1], 'zc_town': ['zip_code', 1,1], 'zc_div': ['zip_code', 2,1]}
+
+tables = {'account_permission': 0, 'address': 1, 'broker': 2, 'cash_transaction': 3, 'charge': 4, 'commission_rate': 5,
+          'company': 6, 'company_competitor': 7, 'customer': 8,
+          'customer_account': 9, 'customer_taxrate': 10, 'daily_market': 11, 'exchange': 12, 'financial': 13,
+          'holding': 14, 'holding_history': 15, 'holding_summary': 16,
+          'industry': 17, 'last_trade': 18, 'news_xref': 19, 'sector': 20, 'security': 21,
+          'seq_trade_id': 22, 'settlement': 23, 'status_type': 24, 'taxrate': 25,
+          'trade': 26, 'trade_history': 27, 'trade_request': 28, 'trade_type': 29, 'watch_item': 30, 'watch_list': 31,
+          'zip_code': 32}
